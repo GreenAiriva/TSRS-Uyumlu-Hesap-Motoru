@@ -1,0 +1,39 @@
+BETIKLER — OTOMASYON SCRIPTLERI
+================================
+
+Bu klasör; tek tıkla çalıştırılabilecek Windows batch (.bat) ve PowerShell
+(.ps1) otomasyon dosyalarının yer alacağı yerdir.
+
+PLANLANAN BETIKLER (Sprint 6):
+------------------------------
+• 01-veri-isle.bat              ← input_cloud taranır, AI ile temizlik yapılır
+                                  taslak JSON'lar üretilir, VS Code'da onayın
+                                  için açılır.
+
+• 02-rapor-uret.bat             ← Onaylı JSON'dan tam PDF rapor üretilir,
+                                  output_cloud altına yazılır, tarayıcı açar.
+
+• 03-senkronize.bat             ← git add . && git commit && git push
+                                  Otomatik mesaj: "Otomatik commit: <tarih>"
+
+• 04-yeni-musteri.bat           ← Sorar: müşteri adı? Yıl?
+                                  _sablon klasörünü kopyalar, yeni isimle hazırlar.
+
+• 05-yedek-al.bat               ← output_cloud altındaki tüm JSON'ları
+                                  şifreli zip arşivi olarak yedekler
+                                  (7-Zip + parola).
+
+NASIL KULLANILIR:
+-----------------
+• Çift tıklamak yeterli — pencere açılır, çalışır, kapanır
+• Her betik kendi adımlarını ekrana yazar
+• Hata olursa pencere kapanmaz, mesajı okuyabilirsin
+• İptal etmek için: Ctrl+C
+
+GÜVENLİK NOTU:
+--------------
+.bat ve .ps1 dosyaları kötü amaçlı kullanılabilir. Bu repoda göreceğin
+betikler açık kaynak ve içeriği görülebilir; ama başka yerden indirilmiş
+batch dosyalarını ASLA çalıştırma.
+
+NOT: Bu klasör şu an boş. Betikler Sprint 6'da yazılacak.

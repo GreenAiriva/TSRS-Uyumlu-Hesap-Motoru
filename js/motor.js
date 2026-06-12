@@ -1,0 +1,384 @@
+/* ============================================================================
+   MOTOR — Sera gazı hesaplama çekirdeği
+   Excel'deki formüllerin JavaScript karşılığı. Emisyon faktörlerini ve KIP
+   (GWP) değerlerini data/ klasöründeki tablolardan canlı okur; Yönetim
+   Paneli'nde yapılan düzenlemeler hesaplara anında yansır.
+   Metodoloji: GHG Protokolü • IPCC 2006 (2019 güncellemesi) • IPCC AR6 KIP.
+   ============================================================================ */
+"use strict";
+window.Motor = (function () {
+  var M = {};
+
+  /* ---- Birim dönüşüm sabitleri ---- */
+  var MIL_KM = 1.609344;
+  var GALON_L = 3.785411784;
+  var KISA_TONMIL_TONKM = 1.45997;   // 1 short ton-mile = 0.90718474 t × 1.609344 km
+  var M3_L = 1000;
+  var SCF_M3 = 0.028316846592;
+
+  function sayi(v) { var n = parseFloat(v); return isFinite(n) ? n : 0; }
+
+  /* ---- KIP (GWP) arama ---- */
+  M.gwpBul = function (gazAdi) {
+    if (!gazAdi) return null;
+    var t = Depo.set("kip_ar6");
+    var hedef = String(gazAdi).trim().toLowerCase();
+    for (var i = 0; i < t.length; i++) {
+      var r = t[i];
+      if (String(r.Gas_Name || "").trim().toLowerCase() === hedef) return sayi(r.GWP_AR6_100yr);
+      if (String(r.Chemical_Formula || "").trim().toLowerCase() === hedef) return sayi(r.GWP_AR6_100yr);
+    }
+    // kısmi eşleşme (örn. "HFC-134a")
+    for (var j = 0; j < t.length; j++) {
+      if (String(t[j].Gas_Name || "").toLowerCase().indexOf(hedef) === 0) return sayi(t[j].GWP_AR6_100yr);
+    }
+    return null;
+  };
+  M.gwpCH4 = function () { var g = M.gwpBul("Methane – fossil"); return g || 29.8; };
+  M.gwpN2O = function () { var g = M.gwpBul("Nitrous oxide"); return g || 273; };
+
+  /* ---- EF birimini, girilen miktar birimine çevirme katsayısı ----
+     EF "kg gaz / EF-birimi" cinsindendir; miktar "giriş-birimi" cinsindendir.
+     Dönen katsayı: girişBirimi → EF-birimi  (miktar × katsayı = EF biriminde miktar) */
+  function birimKatsayi(girisBirimi, efBirimi) {
+    var g = (girisBirimi || "").toLowerCase();
+    var paydaP = (efBirimi || "").split("/")[1] || "";
+    var e = paydaP.trim().toLowerCase();
+    // hacim
+    var hacimL = { "l": 1, "us gallon": GALON_L, "m3": M3_L, "scf": SCF_M3 * M3_L };
+    function hacim(x) {
+      if (x === "litre") x = "l";
+      return hacimL.hasOwnProperty(x) ? hacimL[x] : null;
+    }
+    var gh = hacim(g), eh = hacim(e);
+    if (gh != null && eh != null) return gh / eh;
+    // mesafe
+    var mesafeKm = { "km": 1, "mil": MIL_KM, "mile": MIL_KM, "kilometer": 1 };
+    if (mesafeKm[g] != null && (e === "km" || e === "mile" || e === "kilometer" || e === "mil"))
+      return mesafeKm[g] / mesafeKm[e === "mile" ? "mile" : e];
+    // ton-km
+    var tkm = { "ton-km": 1, "tonne-kilometer": 1, "ton-mil (kısa)": KISA_TONMIL_TONKM, "short ton-mile": KISA_TONMIL_TONKM };
+    if (tkm[g] != null && tkm[e] != null) return tkm[g] / tkm[e];
+    // yolcu-km
+    var pkm = { "yolcu-km": 1, "passenger-kilometer": 1, "yolcu-mil": MIL_KM, "passenger-mile": MIL_KM };
+    if (pkm[g] != null && pkm[e] != null) return pkm[g] / pkm[e];
+    // araç-mil tabloları için km/mil girişi
+    if (e === "vehicle-mile" && (g === "km" || g === "mil")) return (g === "km" ? 1 / MIL_KM : 1);
+    return null;
+  }
+
+  /* ---- gaz EF'lerini kg cinsine indirger (g/.. → kg/..) ---- */
+  function efKg(deger, birim) {
+    var v = sayi(deger);
+    if (!v) return 0;
+    if ((birim || "").trim().toLowerCase().indexOf("g/") === 0) return v / 1000;
+    return v;
+  }
+
+  /* ============================================================
+     KAYNAK SEÇENEKLERİ — kategoriye (ve bölgeye) göre EF kayıtları
+     Her seçenek: { anahtar, etiket, kayit }
+     ============================================================ */
+  M.kaynakSecenekleri = function (kategori, bolge) {
+    var sec = [];
+    function ekle(etiket, kayit) { sec.push({ anahtar: etiket, etiket: etiket, kayit: kayit }); }
+
+    if (kategori === "Sabit Yanma") {
+      Depo.set("ef_sabit_yanma").forEach(function (r) {
+        if (r.Fuel_Name) ekle(r.Fuel_Name + "  [" + (r.Category || "—") + "]", r);
+      });
+    } else if (kategori === "Mobil Yanma - Yakıt") {
+      Depo.set("ef_mobil_yakit").forEach(function (r) {
+        if (bolge && r.Region !== bolge) return;
+        var et = (r.Fuel || "") + (r.Vehicle_Engine_Type ? " — " + r.Vehicle_Engine_Type : "") +
+                 (bolge ? "" : "  [" + r.Region + "]");
+        ekle(et, r);
+      });
+    } else if (kategori === "Mobil Yanma - Mesafe") {
+      Depo.set("ef_mobil_mesafe").forEach(function (r) {
+        if (bolge && r.Region !== bolge) return;
+        var et = (r.Vehicle_Type || "") +
+                 (r.Vehicle_Detail ? " — " + r.Vehicle_Detail : "") +
+                 (r.Vehicle_Year ? " (" + r.Vehicle_Year + ")" : "") +
+                 (r.Fuel && !(r.Vehicle_Detail || "").includes(r.Fuel) ? " — " + r.Fuel : "") +
+                 (bolge ? "" : "  [" + r.Region + "]");
+        ekle(et, r);
+      });
+    } else if (kategori === "Yük Taşıma (Yukarı Akış)" || kategori === "Yük Taşıma (Aşağı Akış)") {
+      Depo.set("ef_tasimacilik").forEach(function (r) {
+        var et = (r.Type ? r.Type + " — " : "") + (r.Vehicle_Class || "") +
+                 (r.Weight_Class ? " / " + r.Weight_Class : "") + (r.Fuel ? " / " + r.Fuel : "");
+        ekle(et, r);
+      });
+    } else if (kategori === "İş Seyahati - Toplu Taşıma" || kategori === "Çalışan Ulaşımı") {
+      Depo.set("ef_toplu_tasima").forEach(function (r) {
+        if (bolge && r.Region && r.Region !== bolge) return;
+        var et = (r.Vehicle ? r.Vehicle + " — " : "") + (r.Vehicle_Class || "") +
+                 (r.Fuel ? " / " + r.Fuel : "") + (bolge ? "" : "  [" + (r.Region || "—") + "]");
+        ekle(et, r);
+      });
+    }
+    return sec;
+  };
+  M.kaynakKaydi = function (kategori, bolge, anahtar) {
+    var sec = M.kaynakSecenekleri(kategori, bolge);
+    for (var i = 0; i < sec.length; i++) if (sec[i].anahtar === anahtar) return sec[i].kayit;
+    // bölge değişmiş olabilir; bölgesiz ara
+    sec = M.kaynakSecenekleri(kategori, null);
+    for (var j = 0; j < sec.length; j++) if (sec[j].anahtar === anahtar) return sec[j].kayit;
+    return null;
+  };
+
+  /* ============================================================
+     FAALİYET SATIRI HESABI (Kapsam 1 ve 3)
+     Dönen: { tco2e, co2kg, ch4kg, n2okg, aciklama, hata }
+     ============================================================ */
+  M.hesapFaaliyet = function (s) {
+    var bos = { tco2e: 0, co2kg: 0, ch4kg: 0, n2okg: 0, aciklama: "", hata: null };
+    var miktar = sayi(s.miktar);
+    if (!s.kategori) return Object.assign(bos, { hata: "Kategori seçilmedi" });
+    if (!miktar) return Object.assign(bos, { hata: "Miktar girilmedi" });
+
+    // Manuel EF girilmişse her kategoride doğrudan kullanılır
+    if (sayi(s.manuelEF) > 0) {
+      var t = miktar * sayi(s.manuelEF) / 1000;
+      return { tco2e: t, co2kg: t * 1000, ch4kg: 0, n2okg: 0,
+               aciklama: "Manuel EF: " + s.manuelEF + " kg CO2e/" + (s.birim || "birim"), hata: null };
+    }
+
+    var kat = s.kategori;
+    if (kat === "Proses Emisyonları" || kat === "Satın Alınan Isı/Buhar" || kat === "Diğer Kapsam 3") {
+      return Object.assign(bos, { hata: "Bu kategori için Manuel EF (kg CO2e/birim) girin" });
+    }
+
+    if (kat === "Sabit Yanma") return hesapSabit(s, miktar);
+
+    var kayit = M.kaynakKaydi(kat, s.bolge, s.kaynak);
+    if (!kayit) return Object.assign(bos, { hata: "Kaynak (yakıt/araç) seçilmedi" });
+
+    var co2kg = 0, ch4kg = 0, n2okg = 0, ef, kts;
+    if (kat === "Mobil Yanma - Yakıt") {
+      kts = birimKatsayi(s.birim, kayit.EF_Unit);
+      if (kts == null) return Object.assign(bos, { hata: "Birim (" + s.birim + ") bu EF ile uyumsuz: " + kayit.EF_Unit });
+      var m = miktar * kts;
+      co2kg = m * efKg(kayit.CO2_EF, kayit.EF_Unit);
+      ch4kg = m * efKg(kayit.CH4_EF, "g/x");   // EPA tablosunda g cinsinden
+      n2okg = m * efKg(kayit.N2O_EF, "g/x");
+      ef = kayit.CO2_EF + " " + kayit.EF_Unit;
+    } else { // mesafe / taşıma / toplu taşıma
+      var co2u = kayit.CO2_Unit || "kg/km";
+      kts = birimKatsayi(s.birim, co2u);
+      if (kts == null) return Object.assign(bos, { hata: "Birim (" + s.birim + ") bu EF ile uyumsuz: " + co2u });
+      var mm = miktar * kts;
+      var co2ef = kayit.CO2_EF_Default != null ? kayit.CO2_EF_Default : kayit.CO2_EF;
+      co2kg = mm * efKg(co2ef, co2u);
+      ch4kg = mm * efKg(kayit.CH4_EF_Default != null ? kayit.CH4_EF_Default : kayit.CH4_EF, kayit.CH4_Unit || "g/x");
+      n2okg = mm * efKg(kayit.N2O_EF_Default != null ? kayit.N2O_EF_Default : kayit.N2O_EF, kayit.N2O_Unit || "g/x");
+      ef = co2ef + " " + co2u;
+    }
+    var tco2e = (co2kg * 1 + ch4kg * M.gwpCH4() + n2okg * M.gwpN2O()) / 1000;
+    return { tco2e: tco2e, co2kg: co2kg, ch4kg: ch4kg, n2okg: n2okg,
+             aciklama: "EF: " + ef + " (DEFRA/EPA)", hata: null };
+  };
+
+  /* Sabit yanma: IPCC 2006 — kütle (t/kg), hacim (L) veya enerji (GJ/kWh/MWh) */
+  function hesapSabit(s, miktar) {
+    var bos = { tco2e: 0, co2kg: 0, ch4kg: 0, n2okg: 0, aciklama: "", hata: null };
+    var kayit = M.kaynakKaydi("Sabit Yanma", null, s.kaynak);
+    if (!kayit) return Object.assign(bos, { hata: "Yakıt seçilmedi" });
+    var b = (s.birim || "tonne").toLowerCase();
+    var ton = null, tj = null;
+    if (b === "tonne" || b === "ton") ton = miktar;
+    else if (b === "kg") ton = miktar / 1000;
+    else if (b === "l" || b === "litre") {
+      var yog = sayi(kayit.Liquid_Density_kg_per_L);
+      if (!yog) return Object.assign(bos, { hata: "Bu yakıt için yoğunluk (kg/L) tanımlı değil; tonne girin" });
+      ton = miktar * yog / 1000;
+    }
+    else if (b === "gj") tj = miktar / 1000;
+    else if (b === "kwh") tj = miktar * 3.6e-6;
+    else if (b === "mwh") tj = miktar * 3.6e-3;
+    else return Object.assign(bos, { hata: "Desteklenmeyen birim: " + s.birim });
+
+    var ncv = sayi(kayit.NCV_TJ_per_Gg); // TJ / 1000 tonne
+    if (tj == null) {
+      if (!ncv) return Object.assign(bos, { hata: "NCV tanımlı değil; enerji birimi (GJ/kWh) kullanın" });
+      tj = ton * ncv / 1000;
+    }
+    var co2kg = tj * sayi(kayit.CO2_kg_per_TJ);
+    var ch4kg = tj * sayi(kayit.CH4_kg_per_TJ);
+    var n2okg = tj * sayi(kayit.N2O_kg_per_TJ);
+    // CO2 kg/TJ boşsa kütle bazlı yedek
+    if (!co2kg && ton != null && sayi(kayit.CO2_kg_per_tonne)) co2kg = ton * sayi(kayit.CO2_kg_per_tonne);
+    var tco2e = (co2kg + ch4kg * M.gwpCH4() + n2okg * M.gwpN2O()) / 1000;
+    return { tco2e: tco2e, co2kg: co2kg, ch4kg: ch4kg, n2okg: n2okg,
+             aciklama: "IPCC 2006 — NCV " + ncv + " TJ/Gg", hata: null };
+  }
+
+  /* ============================================================
+     SOĞUTUCU / KAÇAK GAZ HESABI
+     Kütle Dengesi: kaçak = başlangıç + yeni şarj − çıkarılan − son
+     Tarama:        kaçak = ekipman kapasitesi × yıllık kaçak oranı
+     ============================================================ */
+  M.hesapSogutucu = function (s) {
+    var sonuc = { kacakKg: 0, gwp: null, tco2e: 0, hata: null };
+    var gwp = M.gwpBul(s.gaz);
+    if (!s.gaz) { sonuc.hata = "Gaz seçilmedi"; return sonuc; }
+    if (gwp == null) { sonuc.hata = "KIP bulunamadı: " + s.gaz; return sonuc; }
+    sonuc.gwp = gwp;
+    if (s.yontem === "Tarama (Basit)") {
+      var kapasite = sayi(s.kapasite);
+      var oran = sayi(s.kacakOrani);
+      if (!oran) {
+        var tablo = Depo.set("kacak_oranlari");
+        for (var i = 0; i < tablo.length; i++)
+          if (tablo[i].Ekipman_Turu === s.ekipmanTuru) { oran = sayi(tablo[i].Varsayilan_Kacak_Orani); break; }
+      }
+      if (!kapasite) { sonuc.hata = "Ekipman kapasitesi (kg) girilmedi"; return sonuc; }
+      if (!oran) { sonuc.hata = "Kaçak oranı bulunamadı"; return sonuc; }
+      sonuc.kacakKg = kapasite * oran;
+    } else { // Kütle Dengesi
+      sonuc.kacakKg = sayi(s.baslangic) + sayi(s.yeniSarj) - sayi(s.cikarilan) - sayi(s.sonSarj);
+      if (sonuc.kacakKg < 0) { sonuc.hata = "Negatif kaçak: şarj değerlerini kontrol edin"; sonuc.kacakKg = 0; return sonuc; }
+    }
+    sonuc.tco2e = sonuc.kacakKg * gwp / 1000;
+    return sonuc;
+  };
+
+  /* ============================================================
+     KAPSAM 2 ELEKTRİK — ikili raporlama
+     ============================================================ */
+  M.elektrikSebekeleri = function () {
+    return Depo.set("ef_elektrik").map(function (r) { return r.Region; });
+  };
+  M.hesapElektrik = function (s) {
+    var sonuc = { ld: 0, pd: 0, sebekeEF: 0, hata: null };
+    var kwh = sayi(s.kwh);
+    if (!kwh) { sonuc.hata = "Tüketim (kWh) girilmedi"; return sonuc; }
+    var tablo = Depo.set("ef_elektrik"), g = null;
+    for (var i = 0; i < tablo.length; i++) if (tablo[i].Region === s.sebeke) { g = tablo[i]; break; }
+    if (!g) { sonuc.hata = "Şebeke EF bulunamadı: seçim yapın"; return sonuc; }
+    var efKwh = sayi(g.CO2_EF_kg_per_kWh) +
+                sayi(g.CH4_EF_kg_per_kWh) * M.gwpCH4() +
+                sayi(g.N2O_EF_kg_per_kWh) * M.gwpN2O();
+    sonuc.sebekeEF = efKwh;
+    sonuc.ld = kwh * efKwh / 1000;
+    var rec = Math.min(sayi(s.recKwh), kwh);
+    var tedarikEF = sayi(s.tedarikciEF);
+    var kalan = kwh - rec;
+    sonuc.pd = (rec * 0 + kalan * (tedarikEF > 0 ? tedarikEF : efKwh)) / 1000;
+    return sonuc;
+  };
+
+  /* ============================================================
+     TOPLAMLAR — gösterge paneli ve rapor için tüm özetler
+     ============================================================ */
+  var K3_KATLAR = {
+    "Yük Taşıma (Yukarı Akış)": "yukYukari",
+    "Yük Taşıma (Aşağı Akış)": "yukAsagi",
+    "İş Seyahati - Toplu Taşıma": "seyahat",
+    "Çalışan Ulaşımı": "ulasim",
+    "Diğer Kapsam 3": "diger"
+  };
+  M.kategoriKapsami = function (kat) {
+    if (K3_KATLAR[kat]) return 3;
+    if (kat === "Satın Alınan Elektrik" || kat === "Satın Alınan Isı/Buhar") return 2;
+    return 1;
+  };
+
+  M.toplamlar = function () {
+    var v = Depo.veri;
+    var T = {
+      k1: { sabit: 0, mobil: 0, proses: 0, kacak: 0, toplam: 0 },
+      k2: { ld: 0, pd: 0, isi: 0, kwh: 0, recKwh: 0 },
+      k3: { yukYukari: 0, yukAsagi: 0, seyahat: 0, ulasim: 0, diger: 0, toplam: 0 },
+      gaz: { co2kg: 0, ch4kg: 0, n2okg: 0, fgazkg: 0, fgazTco2e: 0 },
+      hatalar: []
+    };
+    v.faaliyet.forEach(function (s) {
+      var h = M.hesapFaaliyet(s);
+      if (h.hata) { T.hatalar.push((s.no || "?") + ": " + h.hata); return; }
+      T.gaz.co2kg += h.co2kg; T.gaz.ch4kg += h.ch4kg; T.gaz.n2okg += h.n2okg;
+      var kat = s.kategori;
+      if (kat === "Sabit Yanma") T.k1.sabit += h.tco2e;
+      else if (kat === "Mobil Yanma - Yakıt" || kat === "Mobil Yanma - Mesafe") T.k1.mobil += h.tco2e;
+      else if (kat === "Proses Emisyonları") T.k1.proses += h.tco2e;
+      else if (kat === "Satın Alınan Isı/Buhar") T.k2.isi += h.tco2e;
+      else if (K3_KATLAR[kat]) T.k3[K3_KATLAR[kat]] += h.tco2e;
+    });
+    v.sogutucu.forEach(function (s) {
+      var h = M.hesapSogutucu(s);
+      if (h.hata) { T.hatalar.push((s.no || "?") + ": " + h.hata); return; }
+      T.k1.kacak += h.tco2e;
+      T.gaz.fgazkg += h.kacakKg; T.gaz.fgazTco2e += h.tco2e;
+    });
+    v.elektrik.forEach(function (s) {
+      var h = M.hesapElektrik(s);
+      if (h.hata) { T.hatalar.push((s.no || "?") + ": " + h.hata); return; }
+      T.k2.ld += h.ld; T.k2.pd += h.pd;
+      T.k2.kwh += sayi(s.kwh); T.k2.recKwh += Math.min(sayi(s.recKwh), sayi(s.kwh));
+    });
+    T.k1.toplam = T.k1.sabit + T.k1.mobil + T.k1.proses + T.k1.kacak;
+    T.k3.toplam = T.k3.yukYukari + T.k3.yukAsagi + T.k3.seyahat + T.k3.ulasim + T.k3.diger;
+    T.k2ld = T.k2.ld + T.k2.isi;
+    T.k2pd = T.k2.pd + T.k2.isi;
+    T.toplamLD = T.k1.toplam + T.k2ld + T.k3.toplam;
+    T.toplamPD = T.k1.toplam + T.k2pd + T.k3.toplam;
+    var fte = sayi(v.profil.fte), hasilat = sayi(v.profil.hasilat);
+    T.yogunlukFTE = fte > 0 ? T.toplamLD / fte : 0;
+    T.yogunlukHasilat = hasilat > 0 ? T.toplamLD / hasilat : 0;
+    return T;
+  };
+
+  /* ---- Tamamlanma durumu (kenar çubuğu noktaları + panel) ---- */
+  M.durumlar = function () {
+    var v = Depo.veri, D = {};
+    var p = v.profil, zorunlu = ["unvan", "vergiNo", "nace", "yil", "donemBas", "donemBit", "sinir", "fte", "hasilat"];
+    var dolu = zorunlu.filter(function (k) { return p[k] !== undefined && p[k] !== "" && p[k] != null; }).length;
+    D.profil = dolu === 0 ? "bos" : (dolu === zorunlu.length ? "tam" : "kismi");
+    D.profilOran = dolu + "/" + zorunlu.length;
+    D.faaliyet = v.faaliyet.length ? "tam" : "bos";
+    D.sogutucu = v.sogutucu.length ? "tam" : "bos";
+    D.elektrik = v.elektrik.length ? "tam" : "bos";
+    Depo.modulTanimlari().forEach(function (m) {
+      var mv = v.moduller[m.id] || { anlatilar: {}, kayitlar: [] };
+      var anlatSay = Object.keys(mv.anlatilar || {}).filter(function (k) { return (mv.anlatilar[k] || "").trim(); }).length;
+      var kayitSay = (mv.kayitlar || []).length;
+      var hedefAnlat = (m.anlatilar || []).length;
+      if (!anlatSay && !kayitSay) D[m.id] = "bos";
+      else if ((hedefAnlat && anlatSay < hedefAnlat) || (!kayitSay && m.tablo)) D[m.id] = "kismi";
+      else D[m.id] = "tam";
+    });
+    return D;
+  };
+
+  /* ---- TSRS dört direk uyum matrisi ---- */
+  M.uyumMatrisi = function () {
+    var D = M.durumlar();
+    function durum(idler) {
+      var s = idler.map(function (i) { return D[i] || "bos"; });
+      if (s.every(function (x) { return x === "tam"; })) return "Tamamlandı";
+      if (s.some(function (x) { return x !== "bos"; })) return "Devam ediyor";
+      return "Başlanmadı";
+    }
+    return [
+      { direk: "Yönetişim", ref: "TSRS 1 md. 26-27 • TSRS 2 md. 5-7", durum: durum(["yonetisim"]), kaynak: "Yönetişim Açıklamaları" },
+      { direk: "Strateji", ref: "TSRS 2 md. 13-22", durum: durum(["strateji", "direnclilik", "risk_firsat"]), kaynak: "Strateji • Dirençlilik • Risk ve Fırsatlar" },
+      { direk: "Risk Yönetimi", ref: "TSRS 1 md. 43-44 • TSRS 2 md. 24-26", durum: durum(["risk_yonetimi"]), kaynak: "Risk Yönetimi Süreci" },
+      { direk: "Metrikler ve Hedefler", ref: "TSRS 2 md. 29-37", durum: durum(["metrikler", "hedefler"]), kaynak: "Sektörler Arası Metrikler • İklim Hedefleri" }
+    ];
+  };
+
+  /* ---- Sayı biçimleme ---- */
+  M.fmt = function (n, ondalik) {
+    if (n == null || !isFinite(n)) return "—";
+    var o = ondalik == null ? 2 : ondalik;
+    return n.toLocaleString("tr-TR", { minimumFractionDigits: o, maximumFractionDigits: o });
+  };
+  M.pct = function (pay, payda) {
+    if (!payda) return "0%";
+    return M.fmt(100 * pay / payda, 1) + "%";
+  };
+
+  return M;
+})();
