@@ -41,6 +41,9 @@ window.Rapor = (function () {
 
     UI.ustAksiyon(el("button", { class: "btn birincil yazdirma-gizle", type: "button",
       onclick: function () { window.print(); } }, ["⎙ Yazdır / PDF Kaydet"]));
+    UI.ustAksiyon(el("button", { class: "btn ikincil yazdirma-gizle", type: "button",
+      onclick: function () { Motor.hesapDefteriIndir(); UI.bildir("Hesap defteri (JSON) indiriliyor"); } },
+      ["⬇ Hesap Defteri (JSON)"]));
 
     if (T.hatalar.length) {
       kok.appendChild(el("div", { class: "bilgi yazdirma-gizle", style: "border-left-color:var(--oksit)" },

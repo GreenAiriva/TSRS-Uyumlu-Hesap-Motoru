@@ -211,7 +211,7 @@ window.Motor = (function () {
     // CO2 kg/TJ boşsa kütle bazlı yedek
     if (!co2kg && ton != null && sayi(kayit.CO2_kg_per_tonne)) co2kg = ton * sayi(kayit.CO2_kg_per_tonne);
     var tco2e = (co2kg + ch4kg * M.gwpCH4() + n2okg * M.gwpN2O()) / 1000;
-    return { tco2e: tco2e, co2kg: co2kg, ch4kg: ch4kg, n2okg: n2okg,
+    return { tco2e: tco2e, co2kg: co2kg, ch4kg: ch4kg, n2okg: n2okg, enerjiGJ: tj * 1000,
              aciklama: "IPCC 2006 — NCV " + ncv + " TJ/Gg", hata: null };
   }
 
@@ -293,6 +293,7 @@ window.Motor = (function () {
       k2: { ld: 0, pd: 0, isi: 0, kwh: 0, recKwh: 0 },
       k3: { yukYukari: 0, yukAsagi: 0, seyahat: 0, ulasim: 0, diger: 0, toplam: 0 },
       gaz: { co2kg: 0, ch4kg: 0, n2okg: 0, fgazkg: 0, fgazTco2e: 0 },
+      enerji: { yakitGJ: 0, elektrikGJ: 0, toplamGJ: 0 },
       hatalar: []
     };
     v.faaliyet.forEach(function (s) {
@@ -300,7 +301,7 @@ window.Motor = (function () {
       if (h.hata) { T.hatalar.push((s.no || "?") + ": " + h.hata); return; }
       T.gaz.co2kg += h.co2kg; T.gaz.ch4kg += h.ch4kg; T.gaz.n2okg += h.n2okg;
       var kat = s.kategori;
-      if (kat === "Sabit Yanma") T.k1.sabit += h.tco2e;
+      if (kat === "Sabit Yanma") { T.k1.sabit += h.tco2e; if (h.enerjiGJ) T.enerji.yakitGJ += h.enerjiGJ; }
       else if (kat === "Mobil Yanma - Yakıt" || kat === "Mobil Yanma - Mesafe") T.k1.mobil += h.tco2e;
       else if (kat === "Proses Emisyonları") T.k1.proses += h.tco2e;
       else if (kat === "Satın Alınan Isı/Buhar") T.k2.isi += h.tco2e;
@@ -327,6 +328,9 @@ window.Motor = (function () {
     var fte = sayi(v.profil.fte), hasilat = sayi(v.profil.hasilat);
     T.yogunlukFTE = fte > 0 ? T.toplamLD / fte : 0;
     T.yogunlukHasilat = hasilat > 0 ? T.toplamLD / hasilat : 0;
+    // Toplam enerji: sabit yanma yakıt enerjisi + elektrik tüketimi (kWh→GJ)
+    T.enerji.elektrikGJ = T.k2.kwh * 0.0036;
+    T.enerji.toplamGJ = T.enerji.yakitGJ + T.enerji.elektrikGJ;
     return T;
   };
 
@@ -493,12 +497,13 @@ window.Motor = (function () {
         return { deger: T.k1.kacak, birim: "tCO2e",
                  kaynak: "Soğutucu/Kaçak sayfasından (florlu gaz emisyonu)" };
       case "enerji":
-        // Toplam enerji: elektrik (kWh→GJ) + sabit yanma yakıt enerjisi yaklaşık
-        // Şimdilik yalnızca elektrik tüketimini GJ'e çevirip döneriz (kısmi)
-        var gj = T.k2.kwh * 0.0036; // 1 kWh = 0,0036 GJ
-        return { deger: gj, birim: "GJ",
-                 kaynak: "Kapsam 2 elektrik tüketiminden (kısmi; yakıt enerjisi Sprint 5+ ile eklenecek)",
-                 kismi: true };
+        // Toplam enerji = sabit yanma yakıt enerjisi (GJ) + elektrik tüketimi (kWh→GJ)
+        var toplamGJ = T.enerji.toplamGJ;
+        var kismiMi = T.enerji.yakitGJ === 0 && T.enerji.elektrikGJ > 0; // yalnızca elektrik varsa kısmi
+        return { deger: toplamGJ, birim: "GJ",
+                 kaynak: "Sabit yanma yakıt enerjisi (" + M.fmt(T.enerji.yakitGJ, 0) + " GJ) + elektrik (" +
+                         M.fmt(T.enerji.elektrikGJ, 0) + " GJ)",
+                 kismi: kismiMi };
       case "su":
         return null; // Su verisi motor tarafından hesaplanmıyor; kullanıcı girer
       default:
@@ -511,6 +516,133 @@ window.Motor = (function () {
   M.metrikOnerilenDeger = function (metrik) {
     if (metrik.tip !== "hesap" || !metrik.ortak) return null;
     return M.ortakMetrikDegeri(metrik.ortak);
+  };
+
+  /* ============================================================
+     HESAP DEFTERİ (Formula Kaydı) — vizyon Bölüm 9
+     Her hesaplanan büyüklüğü formülü, EF kaynağı, TSRS referansı ve
+     belirsizliğiyle birlikte makine-okunur (ve denetlenebilir) biçimde üretir.
+     output_cloud/<sirket>/<yil>-hesap-defteri.json olarak dışa aktarılır.
+     ============================================================ */
+  M.hesapDefteri = function () {
+    var v = Depo.veri, T = M.toplamlar();
+    var p = v.profil || {};
+    var kayitlar = [];
+
+    function ekle(o) { kayitlar.push(o); }
+
+    // --- Kapsam 1: Sabit Yanma ---
+    if (T.k1.sabit) ekle({
+      metrik_kodu: "K1-SABIT", ad: "Kapsam 1 — Sabit Yanma", deger: T.k1.sabit, birim: "tCO2e",
+      formul: "Σ (Yakıt_TJ × CO2_kg/TJ + CH4_kg/TJ × KIP_CH4 + N2O_kg/TJ × KIP_N2O) / 1000",
+      ef_kaynak: "IPCC 2006 Cilt 2 (Enerji), NCV ve EF varsayılanları",
+      tsrs_ref: ["TSRS 2 md. 29(a)(i)"],
+      belirsizlik: { yontem: "Tier 1", aktivite: "±3%", ef: "±5%" }
+    });
+    if (T.k1.mobil) ekle({
+      metrik_kodu: "K1-MOBIL", ad: "Kapsam 1 — Mobil Yanma", deger: T.k1.mobil, birim: "tCO2e",
+      formul: "Σ (Miktar × EF_CO2 + EF_CH4 × KIP_CH4 + EF_N2O × KIP_N2O) / 1000",
+      ef_kaynak: "DEFRA/US EPA mobil yanma EF",
+      tsrs_ref: ["TSRS 2 md. 29(a)(i)"],
+      belirsizlik: { yontem: "Tier 1", aktivite: "±5%", ef: "±15%" }
+    });
+    if (T.k1.proses) ekle({
+      metrik_kodu: "K1-PROSES", ad: "Kapsam 1 — Proses Emisyonları", deger: T.k1.proses, birim: "tCO2e",
+      formul: "Σ (Miktar × Manuel_EF) / 1000",
+      ef_kaynak: "Kullanıcı tarafından girilen tesise özgü EF",
+      tsrs_ref: ["TSRS 2 md. 29(a)(i)"],
+      belirsizlik: { yontem: "Tier 1", aktivite: "±5%", ef: "±20%" }
+    });
+    if (T.k1.kacak) ekle({
+      metrik_kodu: "K1-KACAK", ad: "Kapsam 1 — Kaçak (F-gaz)", deger: T.k1.kacak, birim: "tCO2e",
+      formul: "Σ (Kaçak_kg × KIP_gaz) / 1000",
+      ef_kaynak: "IPCC 2006 Cilt 3 Böl. 7 + AR6 KIP",
+      tsrs_ref: ["TSRS 2 md. 29(a)(i)"],
+      belirsizlik: { yontem: "Tier 1", aktivite: "±10%", ef: "±50%" }
+    });
+    // --- Kapsam 2 ---
+    if (T.k2ld) ekle({
+      metrik_kodu: "K2-LD", ad: "Kapsam 2 — Lokasyona Dayalı", deger: T.k2ld, birim: "tCO2e",
+      formul: "Σ (kWh × Şebeke_EF) / 1000",
+      ef_kaynak: "T.C. ETKB EVÇED 2023 (Türkiye şebekesi)",
+      tsrs_ref: ["TSRS 2 md. 29(a)(ii)"],
+      belirsizlik: { yontem: "Tier 1", aktivite: "±2%", ef: "±8%" }
+    });
+    if (T.k2pd && T.k2pd !== T.k2ld) ekle({
+      metrik_kodu: "K2-PD", ad: "Kapsam 2 — Piyasaya Dayalı", deger: T.k2pd, birim: "tCO2e",
+      formul: "Σ ((kWh − REC_kWh) × Tedarikçi_EF) / 1000",
+      ef_kaynak: "Tedarikçi beyanı / REC sertifikaları",
+      tsrs_ref: ["TSRS 2 md. 29(a)(iii)"],
+      belirsizlik: { yontem: "Tier 1", aktivite: "±2%", ef: "±8%" }
+    });
+    // --- Kapsam 3 ---
+    if (T.k3.toplam) ekle({
+      metrik_kodu: "K3-TOPLAM", ad: "Kapsam 3 — Diğer Dolaylı", deger: T.k3.toplam, birim: "tCO2e",
+      formul: "Σ (kategori bazlı faaliyet × EF)",
+      ef_kaynak: "DEFRA / GLEC / kullanıcı EF'leri",
+      tsrs_ref: ["TSRS 2 md. 29(a)(i) — Kapsam 3"],
+      belirsizlik: { yontem: "Tier 1", aktivite: "±15%", ef: "±30%" }
+    });
+    // --- Toplam + yoğunluk ---
+    ekle({
+      metrik_kodu: "TOPLAM-LD", ad: "Toplam Emisyon (Lokasyona Dayalı)", deger: T.toplamLD, birim: "tCO2e",
+      formul: "K1 + K2(LD) + K3", ef_kaynak: "—", tsrs_ref: ["TSRS 2 md. 29(a)"], belirsizlik: null
+    });
+
+    // --- Sektör metrikleri (seçili ciltler) ---
+    var sektorKayitlari = [];
+    if (Depo.aktifMetrikler) {
+      var na = Depo.naMetrikler ? Depo.naMetrikler() : [];
+      Depo.aktifMetrikler().forEach(function (m) {
+        if (na.indexOf(m.kod) > -1) {
+          sektorKayitlari.push({ metrik_kodu: m.kod, ad: m.ad, deger: "N/A", tip: m.tip,
+            tsrs_ref: m.ciltler.map(function (c) { return "Cilt " + c.no + " (" + c.prefix + ")"; }) });
+          return;
+        }
+        var mv = Depo.metrikVeri(m.kod);
+        var deger = m.tip === "ta" ? (mv.metin || "") : (mv.deger != null ? mv.deger : "");
+        sektorKayitlari.push({
+          metrik_kodu: m.kod, ad: m.ad, deger: deger, birim: mv.birim || m.birim || "", tip: m.tip,
+          ortak: m.ortak || null,
+          tsrs_ref: m.ciltler.map(function (c) { return "Cilt " + c.no + " (" + c.prefix + ")"; }),
+          not: mv.not || ""
+        });
+      });
+    }
+
+    // --- Belirsizlik özeti ---
+    var belKaynaklar = [];
+    if (T.k1.sabit) belKaynaklar.push({ emisyon: T.k1.sabit, aktiviteBelirsizlik: 3, efBelirsizlik: 5 });
+    if (T.k1.mobil) belKaynaklar.push({ emisyon: T.k1.mobil, aktiviteBelirsizlik: 5, efBelirsizlik: 15 });
+    if (T.k1.proses) belKaynaklar.push({ emisyon: T.k1.proses, aktiviteBelirsizlik: 5, efBelirsizlik: 20 });
+    if (T.k1.kacak) belKaynaklar.push({ emisyon: T.k1.kacak, aktiviteBelirsizlik: 10, efBelirsizlik: 50 });
+    if (T.k2ld) belKaynaklar.push({ emisyon: T.k2ld, aktiviteBelirsizlik: 2, efBelirsizlik: 8 });
+    if (T.k3.toplam) belKaynaklar.push({ emisyon: T.k3.toplam, aktiviteBelirsizlik: 15, efBelirsizlik: 30 });
+    var belirsizlik = M.belirsizlikBilesik(belKaynaklar);
+
+    return {
+      tur: "KarbonMotoru_HesapDefteri", surum: 1, tarih: new Date().toISOString(),
+      sirket: p.unvan || "", yil: p.yil || "",
+      ozet: {
+        kapsam1: T.k1.toplam, kapsam2_ld: T.k2ld, kapsam2_pd: T.k2pd, kapsam3: T.k3.toplam,
+        toplam_ld: T.toplamLD, toplam_pd: T.toplamPD,
+        enerji_GJ: T.enerji.toplamGJ,
+        yogunluk_fte: T.yogunlukFTE, yogunluk_hasilat: T.yogunlukHasilat
+      },
+      emisyon_kayitlari: kayitlar,
+      sektor_metrikleri: sektorKayitlari,
+      belirsizlik: belirsizlik,
+      metodoloji: "GHG Protokolü • IPCC 2006 (2019 güncellemesi) • IPCC AR6 KIP • Tier 1 belirsizlik",
+      hatalar: T.hatalar
+    };
+  };
+
+  // Hesap defterini JSON dosyası olarak indir
+  M.hesapDefteriIndir = function () {
+    var d = M.hesapDefteri();
+    var ad = "hesap-defteri-" + String(d.sirket || "sirket").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") +
+             (d.yil ? "-" + d.yil : "") + ".json";
+    Depo.dosyaIndir(ad, JSON.stringify(d, null, 1), "application/json");
   };
 
   return M;
