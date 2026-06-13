@@ -17,6 +17,7 @@ window.Depo = (function () {
       sogutucu: [],   // Soğutucu akışkan / kaçak satırları
       elektrik: [],   // Kapsam 2 elektrik satırları
       moduller: {},   // TSRS modülleri: { modulId: { anlatilar:{}, kayitlar:[] } }
+      sektorMetrik: {}, // Sektör cilt metrikleri: { metrikKodu: { deger, birim, yontem, not } }
       sayac: 1
     };
   };
@@ -101,11 +102,123 @@ window.Depo = (function () {
   d.modulTanimlari = function () {
     return d.modulTanimOzel || VERI.tsrs_modulleri || [];
   };
+
+  /* ---- Sektör-Cilt sistemi (TSRS 2 Ek Ciltleri) ---- */
+  // Tüm ciltlerin kataloğu (data/sektor_ciltleri.js'ten)
+  d.ciltler = function () {
+    return (window.VERI && VERI.sektor_ciltleri) ? VERI.sektor_ciltleri : [];
+  };
+  // Sektör ailesi adları (CG, EM, ...)
+  d.sektorAileleri = function () {
+    return (window.VERI && VERI.sektor_aileleri) ? VERI.sektor_aileleri : {};
+  };
+  // Belirli bir cilt nesnesini numarasıyla getir
+  d.cilt = function (no) {
+    var bulunan = null;
+    d.ciltler().forEach(function (c) { if (c.no === no) bulunan = c; });
+    return bulunan;
+  };
+  // Profilde seçili cilt numaraları (kullanıcının sektör seçimi)
+  d.seciliCiltNolari = function () {
+    return (d.veri.profil && Array.isArray(d.veri.profil.ciltler)) ? d.veri.profil.ciltler : [];
+  };
+  // Seçili cilt nesneleri (numara sırasına göre)
+  d.seciliCiltler = function () {
+    var secili = d.seciliCiltNolari();
+    return d.ciltler().filter(function (c) { return secili.indexOf(c.no) > -1; });
+  };
+  // Cilt seçimini kaydet (numara dizisi)
+  d.ciltSec = function (noListesi) {
+    if (!d.veri.profil) d.veri.profil = {};
+    d.veri.profil.ciltler = (noListesi || []).slice().sort(function (a, b) { return a - b; });
+    d.kaydet();
+  };
+  // "Uygulanabilir değil" işaretli metrik kodları (örn. taş/mermerde ahşap lifi)
+  d.naMetrikler = function () {
+    return (d.veri.profil && Array.isArray(d.veri.profil.naMetrikler)) ? d.veri.profil.naMetrikler : [];
+  };
+  d.naMetrikDegistir = function (kod, na) {
+    if (!d.veri.profil) d.veri.profil = {};
+    var liste = d.naMetrikler().slice();
+    if (na) { if (liste.indexOf(kod) < 0) liste.push(kod); }
+    else liste = liste.filter(function (k) { return k !== kod; });
+    d.veri.profil.naMetrikler = liste;
+    d.kaydet();
+  };
+  // Seçili ciltlerin TÜM metrikleri, ortak olanlar TEKİLLEŞTİRİLMİŞ (tek-hesap).
+  // Döner: [{ kod, ad, tip, birim, kapsam, ortak, ciltler:[{no,prefix,ad}] }]
+  // Ortak metrikler (ortak anahtarı olanlar) tek satırda birleşir; hangi ciltlerde
+  // istendiği "ciltler" dizisinde toplanır. "Uygulanabilir değil" işaretliler hariç tutulmaz
+  // (raporlamada "N/A" olarak gösterilir), sadece işaret bilgisi taşınır.
+  d.aktifMetrikler = function () {
+    var sonuc = [], ortakHarita = {};
+    d.seciliCiltler().forEach(function (c) {
+      c.metrikler.forEach(function (m) {
+        var ciltBilgi = { no: c.no, prefix: c.prefix, ad: c.ad };
+        if (m.ortak) {
+          // Ortak metrik: anahtara göre birleştir
+          if (!ortakHarita[m.ortak]) {
+            var yeni = {
+              kod: m.kod, ad: m.ad, tip: m.tip, birim: m.birim || "",
+              kapsam: m.kapsam || null, ortak: m.ortak, ciltler: [ciltBilgi]
+            };
+            ortakHarita[m.ortak] = yeni;
+            sonuc.push(yeni);
+          } else {
+            ortakHarita[m.ortak].ciltler.push(ciltBilgi);
+          }
+        } else {
+          sonuc.push({
+            kod: m.kod, ad: m.ad, tip: m.tip, birim: m.birim || "",
+            kapsam: m.kapsam || null, ortak: null, ciltler: [ciltBilgi]
+          });
+        }
+      });
+    });
+    return sonuc;
+  };
   d.modulVeri = function (id) {
     if (!d.veri.moduller[id]) d.veri.moduller[id] = { anlatilar: {}, kayitlar: [] };
     if (!d.veri.moduller[id].anlatilar) d.veri.moduller[id].anlatilar = {};
     if (!d.veri.moduller[id].kayitlar)  d.veri.moduller[id].kayitlar  = [];
     return d.veri.moduller[id];
+  };
+
+  /* ---- Sektör metrik değerleri (dinamik form motoru — Sprint 2) ----
+     Her metrik kodu için kullanıcının girdiği değer(ler) burada saklanır.
+     Şekil: { deger, birim, yontem, not } veya anlatı metrikleri için { metin }.
+     Ortak metrikler tek kod altında saklanır (tek-hesap); raporda çoklu cilde referansla gösterilir. */
+  d.metrikVeri = function (kod) {
+    if (!d.veri.sektorMetrik) d.veri.sektorMetrik = {};
+    if (!d.veri.sektorMetrik[kod]) d.veri.sektorMetrik[kod] = {};
+    return d.veri.sektorMetrik[kod];
+  };
+  d.metrikYaz = function (kod, alan, deger) {
+    var v = d.metrikVeri(kod);
+    v[alan] = deger;
+    d.kaydet(true);
+  };
+  // Bir metriğin doldurulma durumu: "tam" | "kismi" | "bos"
+  d.metrikDurum = function (metrik) {
+    var v = (d.veri.sektorMetrik && d.veri.sektorMetrik[metrik.kod]) || {};
+    if (metrik.tip === "ta") {
+      return (v.metin && String(v.metin).trim()) ? "tam" : "bos";
+    }
+    // hesap/veri: deger alanı dolu mu
+    var dolu = v.deger != null && String(v.deger).trim() !== "";
+    return dolu ? "tam" : "bos";
+  };
+  // Seçili ciltlerdeki tüm metriklerin toplu doldurulma özeti
+  d.metrikOzet = function () {
+    var am = d.aktifMetrikler(), na = d.naMetrikler();
+    var ozet = { toplam: 0, tam: 0, bos: 0, na: 0, hesap: 0, veri: 0, ta: 0 };
+    am.forEach(function (m) {
+      if (na.indexOf(m.kod) > -1) { ozet.na++; return; }
+      ozet.toplam++;
+      ozet[m.tip] = (ozet[m.tip] || 0) + 1;
+      if (d.metrikDurum(m) === "tam") ozet.tam++; else ozet.bos++;
+    });
+    return ozet;
   };
 
   /* ---- Kayıt no üretici ---- */

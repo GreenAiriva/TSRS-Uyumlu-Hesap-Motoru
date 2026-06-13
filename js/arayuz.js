@@ -182,6 +182,7 @@ window.UI = (function () {
       { yol: "faaliyet", ad: "Faaliyet Verisi (K1 ve K3)", ikon: "▲", ciz: cizFaaliyet, durum: "faaliyet", ref: "Kapsam 1 ve 3 — GHG Protokolü Böl. 4 ve 15" },
       { yol: "sogutucu", ad: "Soğutucu / Kaçak Gazlar",   ikon: "❄", ciz: cizSogutucu, durum: "sogutucu", ref: "Kapsam 1 — IPCC 2006 Cilt 3 Böl. 7" },
       { yol: "elektrik", ad: "Kapsam 2 — Elektrik",       ikon: "⚡", ciz: cizElektrik, durum: "elektrik", ref: "TSRS 2 md. 29(a)(ii)-(iii) — ikili raporlama" },
+      { yol: "sektormetrik", ad: "Sektör Metrikleri", ikon: "◈", ciz: cizSektorMetrikleri, durum: "sektormetrik", ref: "TSRS 2 Ek Ciltleri — seçili sektör metrikleri" },
       { grup: "TSRS Açıklamaları" }
     ];
     Depo.modulTanimlari().forEach(function (m) {
@@ -275,7 +276,7 @@ window.UI = (function () {
     return el("section", { class: "kart" + (opts.kapsam ? " kapsam-serit " + opts.kapsam : "") }, [
       baslik ? el("div", { class: "kart-baslik" }, [
         el("h3", null, [baslik]),
-        opts.sag || (opts.mini ? el("span", { class: "mini" }, [opts.mini]) : null)
+        opts.sag || (opts.mini ? el("span", { class: "mini" }, [opts.mini]) : (opts.ref ? el("span", { class: "mini" }, [opts.ref]) : null))
       ]) : null,
       el("div", { class: "kart-ic" }, Array.isArray(ic) ? ic : [ic])
     ]);
@@ -363,6 +364,264 @@ window.UI = (function () {
         ["Yalnızca ilk raporlama yılında kullanılabilen kolaylıklar. İşaretledikleriniz raporda otomatik listelenir."]),
       kutular
     ]));
+
+    /* ====== SEKTÖR VE CİLT SEÇİMİ (TSRS 2 Ek Ciltleri) ====== */
+    cizCiltSecimi(kok);
+  }
+
+  /* Sektör/cilt seçim kartı — şirketin faaliyet alanına göre uygulanabilir TSRS 2
+     Ek Ciltleri seçilir. Seçilen ciltlerin metrikleri dinamik form motoruna girdi olur. */
+  function cizCiltSecimi(kok) {
+    var aileler = Depo.sektorAileleri();
+    var tumCiltler = Depo.ciltler();
+    var secili = Depo.seciliCiltNolari().slice();
+
+    var ozet = el("div", { class: "bilgi", style: "margin:0 0 14px" });
+    function ozetGuncelle() {
+      var n = secili.length;
+      if (!n) {
+        ozet.className = "bilgi";
+        ozet.innerHTML = "Henüz cilt seçilmedi. Şirketinizin faaliyet alanına uyan sektörleri işaretleyin; " +
+          "seçtiğiniz ciltlerin metrikleri otomatik olarak veri giriş formlarına eklenecek.";
+      } else {
+        var metrikSay = Depo.aktifMetrikler().length;
+        ozet.className = "bilgi yesil";
+        ozet.innerHTML = "<b>" + n + " cilt seçildi</b> — ortak metrikler tekilleştirildikten sonra <b>" +
+          metrikSay + " metrik</b> raporlanacak. Seçili ciltler: " +
+          UI.kacir(Depo.seciliCiltler().map(function (c) { return "Cilt " + c.no; }).join(", "));
+      }
+    }
+
+    /* Arama kutusu */
+    var arama = el("input", { type: "text", placeholder: "Cilt ara: ad veya kod (örn. madencilik, EM-MM)\u2026",
+      style: "width:100%;margin-bottom:14px" });
+
+    /* Aile aile gruplandırılmış cilt listesi */
+    var listeKap = el("div");
+
+    function ciztListe() {
+      listeKap.innerHTML = "";
+      var q = (arama.value || "").toLocaleLowerCase("tr");
+      var aileSira = Object.keys(aileler);
+      aileSira.forEach(function (aileKod) {
+        var aileCiltleri = tumCiltler.filter(function (c) {
+          if (c.prefix.split("-")[0] !== aileKod) return false;
+          if (!q) return true;
+          return (c.ad.toLocaleLowerCase("tr").indexOf(q) > -1) ||
+                 (c.prefix.toLocaleLowerCase("tr").indexOf(q) > -1) ||
+                 ("cilt " + c.no).indexOf(q) > -1;
+        });
+        if (!aileCiltleri.length) return;
+
+        var grupBaslik = el("div", { style: "font-weight:600;font-size:12px;color:var(--vurgu,#B4642D);" +
+          "text-transform:uppercase;letter-spacing:.04em;margin:16px 0 8px" },
+          [aileKod + " — " + aileler[aileKod]]);
+        listeKap.appendChild(grupBaslik);
+
+        var izgara = el("div", { style: "display:grid;grid-template-columns:repeat(auto-fill,minmax(280px,1fr));gap:7px" });
+        aileCiltleri.forEach(function (c) {
+          var c0 = el("input", { type: "checkbox", checked: secili.indexOf(c.no) > -1, style: "margin-top:2px;flex:none" });
+          c0.addEventListener("change", function () {
+            if (c0.checked) { if (secili.indexOf(c.no) < 0) secili.push(c.no); }
+            else secili = secili.filter(function (x) { return x !== c.no; });
+            Depo.ciltSec(secili);
+            ozetGuncelle();
+            UI.navGuncelle();
+          });
+          var rozet = c.tureks
+            ? el("span", { class: "rozet", style: "background:#1F7A63;color:#fff;font-size:10px;margin-left:6px" }, ["TUREKS"])
+            : (c.ana ? el("span", { class: "rozet", style: "font-size:10px;margin-left:6px" }, ["ANA"]) : null);
+          var etiket = el("label", { style: "display:flex;gap:8px;align-items:flex-start;font-size:12.5px;" +
+            "font-weight:400;cursor:pointer;padding:7px 9px;border:1px solid var(--cizgi,#e0ddd6);border-radius:6px;" +
+            (secili.indexOf(c.no) > -1 ? "background:rgba(31,122,99,.06);border-color:#1F7A63" : "") },
+            [c0, el("span", null, [
+              el("b", { style: "font-weight:600" }, ["Cilt " + c.no + " "]),
+              c.ad, rozet,
+              el("span", { style: "display:block;color:var(--soluk,#888);font-size:11px;margin-top:2px" },
+                [c.prefix + " • " + c.metrikler.length + " metrik • " + ciltTipEtiket(c.tip)])
+            ])]);
+          izgara.appendChild(etiket);
+        });
+        listeKap.appendChild(izgara);
+      });
+      if (!listeKap.children.length) {
+        listeKap.appendChild(el("div", { class: "bos-durum" }, [
+          el("div", null, ["\u201C" + UI.kacir(arama.value) + "\u201D ile eşleşen cilt bulunamadı."])]));
+      }
+    }
+    arama.addEventListener("input", ciztListe);
+
+    /* Hızlı seçim düğmeleri */
+    var turevDugme = el("button", { class: "btn ikincil kucuk", type: "button", onclick: function () {
+      tumCiltler.forEach(function (c) { if (c.tureks && secili.indexOf(c.no) < 0) secili.push(c.no); });
+      Depo.ciltSec(secili); ciztListe(); ozetGuncelle(); UI.navGuncelle();
+      UI.bildir("TUREKS ciltleri (3, 6, 8, 10) seçildi");
+    } }, ["TUREKS varsayılanı (3-6-8-10)"]);
+    var temizleDugme = el("button", { class: "btn ikincil kucuk", type: "button", onclick: function () {
+      secili = []; Depo.ciltSec(secili); ciztListe(); ozetGuncelle(); UI.navGuncelle();
+    } }, ["Seçimi temizle"]);
+
+    ozetGuncelle();
+    ciztListe();
+
+    kok.appendChild(UI.kart("Sektör ve Cilt Seçimi (TSRS 2 Ek Ciltleri)", [
+      el("p", { style: "margin:0 0 12px;font-size:12.5px;color:var(--soluk)" },
+        ["Şirketiniz hangi sektör(ler)de faaliyet gösteriyorsa o ciltleri seçin. Bir şirket birden çok cilt kapsayabilir " +
+         "(örn. hem madencilik hem inşaat malzemesi). Seçtiğiniz ciltlerin tüm metrikleri raporlanacak; " +
+         "birden çok cilttte ortak istenen metrikler (enerji, su, Kapsam 1 gibi) tek kez hesaplanıp ilgili tüm ciltlere referansla gösterilir."]),
+      ozet,
+      el("div", { style: "display:flex;gap:8px;margin-bottom:4px;flex-wrap:wrap" }, [turevDugme, temizleDugme]),
+      arama,
+      listeKap
+    ], { ref: "TSRS 2 md. 29 • Sektöre özgü metrikler" }));
+  }
+
+  /* Cilt tipi etiketi (hesap yükü göstergesi) */
+  function ciltTipEtiket(tip) {
+    return ({ agir: "hesap-ağır", orta: "hesap-orta", hafif: "hesap-hafif", finansal: "anlatı (hesap yok)" })[tip] || tip || "";
+  }
+
+  /* ============================================================
+     SAYFA: SEKTÖR METRİKLERİ (Dinamik form motoru — Sprint 2)
+     Seçili ciltlerin tüm metriklerini, tipine göre uygun arayüzle döker.
+     - hesap: motor tarafından hesaplanması beklenen; şimdilik manuel + bilgi rozeti
+     - veri : kullanıcı sayı/yüzde girer
+     - ta   : anlatı metni ([VERİ BEKLENİYOR] — Y4)
+     Her metrik kartında TSRS kodu + hangi cilt(ler)de istendiği gösterilir. ============================================================ */
+  // Tek bir metrik için giriş satırı üretir (tipine göre)
+  function metrikSatiri(m) {
+    var na = Depo.naMetrikler().indexOf(m.kod) > -1;
+    var v = Depo.metrikVeri(m.kod);
+
+    // Cilt referans rozetleri (ortak metrikse birden çok)
+    var ciltRozetleri = m.ciltler.map(function (c) {
+      return el("span", { class: "rozet", style: "font-size:10px;margin-right:4px;" +
+        (c.tureks ? "" : "") }, ["Cilt " + c.no]);
+    });
+    var ortakNot = m.ciltler.length > 1
+      ? el("span", { style: "font-size:11px;color:#1F7A63;font-weight:600;margin-left:4px" },
+          ["◈ ortak metrik — tek kez girin, " + m.ciltler.length + " cilde işlenir"])
+      : null;
+
+    // Tip rozeti
+    var tipRozet = ({
+      hesap: el("span", { class: "rozet", style: "background:#B4642D;color:#fff;font-size:10px" }, ["hesaplanan"]),
+      veri:  el("span", { class: "rozet", style: "background:#5B6B7C;color:#fff;font-size:10px" }, ["veri girişi"]),
+      ta:    el("span", { class: "rozet", style: "background:#8A7A5C;color:#fff;font-size:10px" }, ["anlatı"])
+    })[m.tip];
+
+    // Giriş alanı (tipe göre)
+    var girisAlani;
+    if (m.tip === "ta") {
+      var ta = el("textarea", { rows: "3", value: v.metin || "",
+        placeholder: "[VERİ BEKLENİYOR: " + m.kod + "] — müşteriden gelecek açıklama metni buraya" });
+      ta.addEventListener("input", function () { Depo.metrikYaz(m.kod, "metin", ta.value); });
+      ta.addEventListener("change", function () { UI.bildir("Kaydedildi"); UI.navGuncelle(); });
+      girisAlani = el("div", { class: "alan genis" }, [ta]);
+    } else {
+      // hesap + veri: sayı + birim + (hesap ise yöntem/not)
+      var sayi = el("input", { type: "number", step: "any", inputMode: "decimal", value: v.deger != null ? v.deger : "",
+        placeholder: m.tip === "hesap" ? "Motor hesaplayacak / manuel girilebilir" : "Değer girin" });
+      sayi.addEventListener("input", function () { Depo.metrikYaz(m.kod, "deger", sayi.value); });
+      sayi.addEventListener("change", function () { UI.bildir("Kaydedildi"); UI.navGuncelle(); });
+
+      var birim = el("input", { type: "text", value: v.birim || m.birim || "", placeholder: "birim",
+        style: "max-width:120px" });
+      birim.addEventListener("input", function () { Depo.metrikYaz(m.kod, "birim", birim.value); });
+
+      var notG = el("input", { type: "text", value: v.not || "", placeholder: "Kaynak / hesap dayanağı / açıklama" });
+      notG.addEventListener("input", function () { Depo.metrikYaz(m.kod, "not", notG.value); });
+
+      girisAlani = el("div", { style: "display:grid;grid-template-columns:1fr 130px;gap:10px" }, [
+        el("div", { class: "alan" }, [el("label", null, ["Değer"]), sayi]),
+        el("div", { class: "alan" }, [el("label", null, ["Birim"]), birim]),
+        el("div", { class: "alan genis", style: "grid-column:1/-1" }, [el("label", null, ["Not / Dayanak"]), notG])
+      ]);
+      if (m.tip === "hesap") {
+        girisAlani.insertBefore(
+          el("div", { class: "bilgi", style: "grid-column:1/-1;margin:0 0 4px;font-size:11.5px" },
+            ["Bu metrik ileride hesaplama motoruna bağlanacak (Sprint 5). Şimdilik elle girebilir veya boş bırakabilirsiniz."]),
+          girisAlani.firstChild);
+      }
+    }
+
+    var durum = Depo.metrikDurum(m);
+    var nokta = el("span", { class: "nokta " + (na ? "bos" : durum), style: "flex:none" });
+
+    // N/A işaret kutusu
+    var naKutu = el("input", { type: "checkbox", checked: na, style: "margin:0" });
+    naKutu.addEventListener("change", function () {
+      Depo.naMetrikDegistir(m.kod, naKutu.checked);
+      UI.ciz();
+    });
+    var naEtiket = el("label", { style: "display:flex;gap:5px;align-items:center;font-size:11px;" +
+      "font-weight:400;color:var(--soluk,#888);cursor:pointer;white-space:nowrap" },
+      [naKutu, "Uygulanabilir değil (N/A)"]);
+
+    var baslik = el("div", { style: "display:flex;align-items:flex-start;gap:9px;margin-bottom:9px" }, [
+      nokta,
+      el("div", { style: "flex:1" }, [
+        el("div", { style: "font-weight:600;font-size:13.5px;margin-bottom:3px" }, [m.ad]),
+        el("div", { style: "font-size:11.5px;color:var(--soluk,#888)" }, [
+          el("b", { style: "color:var(--vurgu,#B4642D);font-weight:600" }, [m.kod]), " • ",
+          tipRozet, " ", ortakNot
+        ])
+      ]),
+      naEtiket
+    ]);
+
+    return el("div", { class: "kart", style: "padding:14px 16px;margin-bottom:10px;" +
+      (na ? "opacity:.55" : "") }, [baslik, na ? el("div", { class: "bilgi", style: "margin:0;font-size:12px" },
+        ["Bu metrik şirketiniz için uygulanabilir değil olarak işaretlendi; raporda ‘N/A’ olarak belirtilecek."]) : girisAlani]);
+  }
+
+  function cizSektorMetrikleri(kok) {
+    var secili = Depo.seciliCiltler();
+    if (!secili.length) {
+      kok.appendChild(UI.kart("Henüz sektör seçilmedi", [
+        el("p", { style: "margin:0 0 14px" }, [
+          "Bu sayfa, Şirket Profili'nde seçtiğiniz TSRS 2 Ek Ciltlerinin metriklerini otomatik olarak listeler. " +
+          "Önce sektör(ler)inizi seçmelisiniz."]),
+        el("a", { class: "btn birincil", href: "#/profil" }, ["Şirket Profiline git →"])
+      ]));
+      return;
+    }
+
+    var am = Depo.aktifMetrikler();
+    var ozet = Depo.metrikOzet();
+
+    // Üst özet
+    kok.appendChild(el("div", { class: "bilgi yesil" }, [
+      el("b", null, [secili.length + " cilt seçili • " + ozet.toplam + " metrik"]),
+      " (" + ozet.tam + " dolu, " + ozet.bos + " boş" + (ozet.na ? ", " + ozet.na + " N/A" : "") + ") — ",
+      "hesaplanan: " + (ozet.hesap || 0) + ", veri girişi: " + (ozet.veri || 0) + ", anlatı: " + (ozet.ta || 0)
+    ]));
+    kok.appendChild(el("div", { class: "bilgi", style: "font-size:12px" }, [
+      "Metrikler cilt cilt gruplandırılmıştır. Ø Ortak metrikler (enerji, su, Kapsam 1 gibi) yalnızca bir kez, " +
+      "ilk istendikleri cilt altında görünür; girdiğiniz değer ilgili tüm ciltlere otomatik işlenir."
+    ]));
+
+    // Hangi ortak metrikler hangi cilt altında “ev sahibi” olarak gösterilecek?
+    // aktifMetrikler() zaten ortakları tek satıra indirdi; her metriği İLK cildine yerleştirelim.
+    var ilkCiltNo = {};
+    am.forEach(function (m) { ilkCiltNo[m.kod] = m.ciltler[0].no; });
+
+    secili.forEach(function (c) {
+      // Bu cilde ait gösterilecek metrikler: aktif metrik listesinde ev sahibi bu cilt olanlar
+      var ciltMetrikleri = am.filter(function (m) { return ilkCiltNo[m.kod] === c.no; });
+      if (!ciltMetrikleri.length) return;
+
+      var govde = el("div");
+      // Tip sırası: önce hesaplanan, sonra veri, sonra anlatı
+      var sira = { hesap: 0, veri: 1, ta: 2 };
+      ciltMetrikleri.sort(function (a, b) { return (sira[a.tip] || 9) - (sira[b.tip] || 9); });
+      ciltMetrikleri.forEach(function (m) { govde.appendChild(metrikSatiri(m)); });
+
+      var rozet = c.tureks
+        ? el("span", { class: "mini", style: "color:#1F7A63" }, [c.prefix + " • TUREKS"])
+        : el("span", { class: "mini" }, [c.prefix]);
+      kok.appendChild(UI.kart("Cilt " + c.no + " — " + c.ad, [govde], { sag: rozet }));
+    });
   }
 
   /* ============================================================

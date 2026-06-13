@@ -340,6 +340,14 @@ window.Motor = (function () {
     D.faaliyet = v.faaliyet.length ? "tam" : "bos";
     D.sogutucu = v.sogutucu.length ? "tam" : "bos";
     D.elektrik = v.elektrik.length ? "tam" : "bos";
+    // Sektör metrikleri durumu (seçili ciltlerin metrik doldurma oranı)
+    if (Depo.seciliCiltNolari && Depo.seciliCiltNolari().length) {
+      var mo = Depo.metrikOzet();
+      D.sektormetrik = mo.tam === 0 ? "bos" : (mo.tam >= mo.toplam ? "tam" : "kismi");
+      D.sektormetrikOran = mo.tam + "/" + mo.toplam;
+    } else {
+      D.sektormetrik = "bos";
+    }
     Depo.modulTanimlari().forEach(function (m) {
       var mv = v.moduller[m.id] || { anlatilar: {}, kayitlar: [] };
       var anlatSay = Object.keys(mv.anlatilar || {}).filter(function (k) { return (mv.anlatilar[k] || "").trim(); }).length;
