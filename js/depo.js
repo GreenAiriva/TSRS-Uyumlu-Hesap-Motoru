@@ -98,6 +98,17 @@ window.Depo = (function () {
     return (VERI.ayarlar || {})[anahtar];
   };
 
+  /* ---- EF kaynakları ve belirsizlik (Sprint 3) ---- */
+  d.efKaynaklari = function () {
+    return (window.VERI && VERI.ef_kaynaklari) ? VERI.ef_kaynaklari : {};
+  };
+  d.efKaynak = function (setAdi) {
+    return d.efKaynaklari()[setAdi] || null;
+  };
+  d.belirsizlikMetodolojisi = function () {
+    return (window.VERI && VERI.belirsizlik_metodolojisi) ? VERI.belirsizlik_metodolojisi : null;
+  };
+
   /* ---- Modül tanımları ---- */
   d.modulTanimlari = function () {
     return d.modulTanimOzel || VERI.tsrs_modulleri || [];
@@ -275,6 +286,86 @@ window.Depo = (function () {
       "window.VERI = window.VERI || {};\n" +
       "VERI." + ad + " = " + JSON.stringify(satirlar, null, 1) + ";\n";
     d.dosyaIndir(dosyaAdi, icerik, "text/javascript");
+  };
+
+  /* ---- ŞİRKET VERİ PAKETİ (Sprint 7 — çok-şirketli taşıma) ----
+     Bir şirketin TÜM verisini (profil + faaliyet + soğutucu + elektrik + modüller +
+     sektör metrikleri) tek dosyada dışa aktarır. Şirketler arası taşıma ve
+     input_cloud/output_cloud arşivleme için. Referans tablolarını İÇERMEZ (onlar ortak). */
+  d.sirketPaketiAl = function () {
+    var unvan = (d.veri.profil && d.veri.profil.unvan) ? d.veri.profil.unvan : "sirket";
+    var yil = (d.veri.profil && d.veri.profil.yil) ? d.veri.profil.yil : "";
+    var paket = {
+      tur: "KarbonMotoru_SirketPaketi", surum: 1, tarih: new Date().toISOString(),
+      sirket: unvan, yil: yil,
+      veri: d.veri
+    };
+    var ad = "sirket-" + String(unvan).toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") +
+             (yil ? "-" + yil : "") + ".json";
+    d.dosyaIndir(ad, JSON.stringify(paket, null, 1), "application/json");
+  };
+  d.sirketPaketiYukle = function (metin) {
+    var p = guvenliParse(metin, null);
+    if (!p || p.tur !== "KarbonMotoru_SirketPaketi") return "Bu dosya bir Şirket Veri Paketi değil.";
+    d.veri = Object.assign(bosVeri(), p.veri || {});
+    d.kaydet(true);
+    return null;
+  };
+
+  /* ---- CSV FAALİYET İÇE AKTARMA (Sprint 7) ----
+     Karışık formatlı müşteri verisini standart faaliyet kayıtlarına çevirir.
+     Beklenen sütunlar (esnek, başlık satırından eşlenir):
+     tesis, kategori, kaynak, miktar, birim, donem, aciklama
+     Dönen: { eklenen, atlanan, hatalar:[] } */
+  d.csvFaaliyetIceAktar = function (csvMetin) {
+    var sonuc = { eklenen: 0, atlanan: 0, hatalar: [] };
+    if (!csvMetin || !csvMetin.trim()) { sonuc.hatalar.push("Boş dosya"); return sonuc; }
+    var satirlar = csvMetin.split(/\r?\n/).filter(function (s) { return s.trim(); });
+    if (satirlar.length < 2) { sonuc.hatalar.push("En az başlık + 1 veri satırı gerekir"); return sonuc; }
+    // Ayırıcı tespiti: noktalı virgül veya virgül
+    var ayirici = (satirlar[0].split(";").length > satirlar[0].split(",").length) ? ";" : ",";
+    function hucreler(satir) {
+      return satir.split(ayirici).map(function (h) { return h.trim().replace(/^"|"$/g, ""); });
+    }
+    var basliklar = hucreler(satirlar[0]).map(function (h) { return h.toLocaleLowerCase("tr"); });
+    function indeks(adlar) {
+      for (var i = 0; i < adlar.length; i++) {
+        var k = basliklar.indexOf(adlar[i]);
+        if (k > -1) return k;
+      }
+      return -1;
+    }
+    var iTesis = indeks(["tesis", "tesis/faaliyet", "faaliyet", "ad"]);
+    var iKat = indeks(["kategori", "emisyon kategorisi"]);
+    var iKaynak = indeks(["kaynak", "yakıt", "yakit", "araç", "arac"]);
+    var iMiktar = indeks(["miktar", "değer", "deger", "tüketim", "tuketim"]);
+    var iBirim = indeks(["birim"]);
+    var iDonem = indeks(["donem", "dönem", "ay", "tarih"]);
+    var iAcik = indeks(["aciklama", "açıklama", "not", "dayanak"]);
+    if (iKat < 0 || iMiktar < 0) {
+      sonuc.hatalar.push("Zorunlu sütunlar bulunamadı: en az 'kategori' ve 'miktar' başlıkları olmalı");
+      return sonuc;
+    }
+    for (var r = 1; r < satirlar.length; r++) {
+      var h = hucreler(satirlar[r]);
+      var miktar = (h[iMiktar] || "").replace(/\./g, "").replace(",", "."); // TR sayı → nokta
+      if (!h[iKat] || !miktar || isNaN(parseFloat(miktar))) { sonuc.atlanan++; continue; }
+      var kayit = {
+        no: d.yeniNo("F"),
+        tesis: iTesis > -1 ? h[iTesis] : "(CSV içe aktarım)",
+        kategori: h[iKat],
+        kaynak: iKaynak > -1 ? h[iKaynak] : "",
+        miktar: miktar,
+        birim: iBirim > -1 ? h[iBirim] : "",
+        donem: iDonem > -1 ? h[iDonem] : "",
+        aciklama: (iAcik > -1 ? h[iAcik] : "") + " [CSV içe aktarım]",
+        bolge: "TR"
+      };
+      d.veri.faaliyet.push(kayit);
+      sonuc.eklenen++;
+    }
+    if (sonuc.eklenen) d.kaydet(true);
+    return sonuc;
   };
 
   return d;

@@ -174,6 +174,43 @@ window.Rapor = (function () {
     }
     kok.appendChild(s3);
 
+    /* ============ SAYFA 3B — SEKTÖR METRİKLERİ (TSRS 2 Ek Ciltleri) ============ */
+    var seciliCiltler = Depo.seciliCiltler ? Depo.seciliCiltler() : [];
+    if (seciliCiltler.length) {
+      var sM = el("div", { class: "rapor-sayfa" });
+      sM.appendChild(ust(p));
+      sM.appendChild(el("h1", null, ["Sektöre Özgü Metrikler (TSRS 2 Ek Ciltleri)"]));
+      sM.appendChild(el("p", { style: "font-size:11px;color:var(--soluk);margin:0 0 10px" }, [
+        "Kuruluşun faaliyet gösterdiği sektörlere ilişkin TSRS 2 Ek Cilt metrikleri. " +
+        "Birden çok ciltte ortak istenen metrikler tek kez raporlanmış, ilgili tüm ciltlere referans verilmiştir."
+      ]));
+
+      var am = Depo.aktifMetrikler();
+      var na = Depo.naMetrikler();
+      var ilkCiltNo = {};
+      am.forEach(function (m) { ilkCiltNo[m.kod] = m.ciltler[0].no; });
+
+      seciliCiltler.forEach(function (c) {
+        var ciltMetrikleri = am.filter(function (m) { return ilkCiltNo[m.kod] === c.no; });
+        if (!ciltMetrikleri.length) return;
+        sM.appendChild(el("h2", null, ["Cilt " + c.no + " — " + c.ad + " (" + c.prefix + ")"]));
+        sM.appendChild(el("table", null, [
+          th(["Metrik Kodu", "Açıklama", { t: "Değer", sinif: "sayi" }, "Tip / Referans"]),
+          el("tbody", null, ciltMetrikleri.map(function (m) {
+            var naMi = na.indexOf(m.kod) > -1;
+            var v = Depo.metrikVeri(m.kod);
+            var deger;
+            if (naMi) deger = { sayi: "N/A" };
+            else if (m.tip === "ta") deger = (v.metin && v.metin.trim()) ? UI.kisalt(v.metin, 40) : el("span", { class: "bos" }, ["(boş)"]);
+            else deger = { sayi: (v.deger != null && v.deger !== "") ? Motor.fmt(parseFloat(v.deger), 2) + " " + (v.birim || m.birim || "") : "—" };
+            var ortakNot = m.ciltler.length > 1 ? " • ortak (" + m.ciltler.map(function (x) { return "C" + x.no; }).join(",") + ")" : "";
+            return trS([el("b", null, [m.kod]), UI.kisalt(m.ad, 44), deger, m.tip + ortakNot]);
+          }))
+        ]));
+      });
+      kok.appendChild(sM);
+    }
+
     /* ============ SAYFA 4 — TSRS dört temel içerik ============ */
     var s4 = el("div", { class: "rapor-sayfa" });
     s4.appendChild(ust(p));
@@ -229,6 +266,32 @@ window.Rapor = (function () {
     }
     anlatBolumu("onemlilik", "Önemlilik Değerlendirmesi");
     anlatBolumu("muhakemeler", "Önemli Muhakemeler ve Belirsizlikler");
+
+    /* Belirsizlik özeti (TSRS 1 md. 77-82) — Tier 1 bileşik */
+    if (window.Motor && Motor.belirsizlikBilesik) {
+      var kaynaklarB = [];
+      if (T.k1.sabit) kaynaklarB.push({ ad: "Sabit Yanma", emisyon: T.k1.sabit, aktiviteBelirsizlik: 3, efBelirsizlik: 5 });
+      if (T.k1.mobil) kaynaklarB.push({ ad: "Mobil Yanma", emisyon: T.k1.mobil, aktiviteBelirsizlik: 5, efBelirsizlik: 15 });
+      if (T.k1.proses) kaynaklarB.push({ ad: "Proses", emisyon: T.k1.proses, aktiviteBelirsizlik: 5, efBelirsizlik: 20 });
+      if (T.k1.kacak) kaynaklarB.push({ ad: "Kaçak (F-gaz)", emisyon: T.k1.kacak, aktiviteBelirsizlik: 10, efBelirsizlik: 50 });
+      if (T.k2ld) kaynaklarB.push({ ad: "Kapsam 2", emisyon: T.k2ld, aktiviteBelirsizlik: 2, efBelirsizlik: 8 });
+      if (T.k3.toplam) kaynaklarB.push({ ad: "Kapsam 3", emisyon: T.k3.toplam, aktiviteBelirsizlik: 15, efBelirsizlik: 30 });
+      if (kaynaklarB.length) {
+        var b = Motor.belirsizlikBilesik(kaynaklarB);
+        s4.appendChild(el("h2", null, ["Tahmin Belirsizliği (TSRS 1 md. 77-82)"]));
+        s4.appendChild(el("p", { style: "font-size:11px;color:var(--soluk);margin:0 0 6px" }, [
+          "IPCC Tier 1 yaklaşımıyla, aktivite verisi ve emisyon faktörü belirsizlikleri karekök-kareler-toplamı " +
+          "yöntemiyle birleştirilmiştir. Değerler varsayılan IPCC belirsizlik aralıklarına dayanır."
+        ]));
+        s4.appendChild(el("table", null, [
+          th(["Toplam Emisyon (tCO2e)", { t: "Bileşik Belirsizlik", sinif: "sayi" }, { t: "%95 Güven Aralığı (tCO2e)", sinif: "sayi" }]),
+          el("tbody", null, [
+            trS([{ sayi: Motor.fmt(b.toplamEmisyon, 2) }, { sayi: "±" + Motor.fmt(b.bilesikBelirsizlikYuzde, 1) + "%" },
+              { sayi: Motor.fmt(b.altSinir, 1) + " – " + Motor.fmt(b.ustSinir, 1) }])
+          ])
+        ]));
+      }
+    }
 
     s4.appendChild(el("p", { style: "margin-top:30px;font-size:10.5px;color:var(--soluk);border-top:1px solid var(--cizgi);padding-top:8px" },
       [(Depo.ayar("rapor_dipnotu") || "") + " — Oluşturma: " + new Date().toLocaleDateString("tr-TR")]));

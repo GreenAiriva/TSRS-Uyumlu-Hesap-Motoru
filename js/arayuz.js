@@ -177,6 +177,8 @@ window.UI = (function () {
       { yol: "panel",   ad: "Gösterge Paneli",      ikon: "◧", ciz: function (k) { Panel.ciz(k); } },
       { yol: "kilavuz", ad: "Kılavuz",              ikon: "✦", ciz: cizKilavuz },
       { yol: "rapor",   ad: "Envanter Raporu",      ikon: "▤", ciz: function (k) { Rapor.ciz(k); }, ref: "TSRS 2 md. 29(a) • GHG Protokolü" },
+      { yol: "kutuphane", ad: "Veri Kütüphanesi", ikon: "▩", ciz: cizKutuphane, ref: "Emisyon faktörü kaynakları • belirsizlik • IPCC/DEFRA/AR6" },
+      { yol: "araclar", ad: "IPCC Hesap Araçları", ikon: "⚙", ciz: cizAraclar, ref: "CHP (kojenerasyon) • gelişmiş HFC/PFC • belirsizlik" },
       { grup: "Veri Girişi" },
       { yol: "profil",   ad: "Şirket Profili",            ikon: "▣", ciz: cizProfil, durum: "profil", ref: "TSRS 1 md. 20, 27, 60-69" },
       { yol: "faaliyet", ad: "Faaliyet Verisi (K1 ve K3)", ikon: "▲", ciz: cizFaaliyet, durum: "faaliyet", ref: "Kapsam 1 ve 3 — GHG Protokolü Böl. 4 ve 15" },
@@ -299,6 +301,213 @@ window.UI = (function () {
       el("p", { style: "margin:0 0 8px" }, ["Girdiğiniz her şey bu tarayıcının kalıcı hafızasına otomatik kaydedilir; sayfayı kapatsanız da kaybolmaz. Yine de düzenli olarak Yönetim Paneli → Yedekleme sekmesinden JSON yedeği almanızı öneririz. Yedek dosyası başka bir bilgisayara da taşınabilir."]),
       el("p", { style: "margin:0;color:var(--soluk);font-size:12.5px" }, ["Emisyon faktörleri, açılır listeler ve form alanları data/ klasöründeki dosyalardan okunur ve Yönetim Paneli'nden kod yazmadan düzenlenebilir."])
     ]));
+  }
+
+  /* ============================================================
+     SAYFA: VERİ KÜTÜPHANESİ (Sprint 3)
+     Tüm emisyon faktörü tablolarının kaynağını, güncellemesini, belirsizliğini
+     ve TSRS referansını şeffaf biçimde gösterir. TSRS 1 md. 77-82 (ölçüm
+     belirsizliği) ve metodoloji şeffaflığı için. ============================================================ */
+  function cizKutuphane(kok) {
+    var kaynaklar = Depo.efKaynaklari();
+    var anahtarlar = Object.keys(kaynaklar);
+
+    kok.appendChild(el("div", { class: "bilgi" }, [
+      "Bu sayfa, hesaplama motorunun kullandığı tüm emisyon faktörü tablolarının bilimsel kaynağını, güncelliğini ve " +
+      "belirsizlik aralıklarını gösterir. Değerlerin kendisi Yönetim Paneli'nden düzenlenebilir; bu sayfa şeffaflık ve " +
+      "TSRS 1 md. 77-82 (ölçüm belirsizliği açıklaması) için referans niteliğindedir."
+    ]));
+
+    // Belirsizlik metodolojisi kartı
+    var met = Depo.belirsizlikMetodolojisi();
+    if (met) {
+      kok.appendChild(UI.kart(met.yaklasim, [
+        el("p", { style: "margin:0 0 10px;line-height:1.6" }, [met.aciklama]),
+        el("p", { style: "margin:0 0 6px;font-size:12.5px;color:var(--soluk)" }, ["Kaynak: " + met.kaynak]),
+        el("p", { style: "margin:0 0 6px;font-size:12.5px" }, [
+          el("b", { style: "color:var(--vurgu,#B4642D)" }, [met.tsrs_ref])]),
+        el("div", { class: "bilgi", style: "margin:8px 0 0;font-size:12px" }, [met.durum])
+      ], { mini: "Belirsizlik yaklaşımı" }));
+    }
+
+    // Her EF tablosu için kaynak kartı
+    anahtarlar.forEach(function (anahtar) {
+      var k = kaynaklar[anahtar];
+      var satirlar = [];
+
+      satirlar.push(el("div", { style: "margin-bottom:10px" }, [
+        el("div", { style: "font-size:12px;color:var(--soluk,#888);margin-bottom:2px" }, ["K A Y N A K"]),
+        el("div", { style: "line-height:1.55" }, [k.kaynak])
+      ]));
+
+      if (k.guncelleme) {
+        satirlar.push(el("div", { style: "margin-bottom:10px" }, [
+          el("span", { class: "rozet", style: "background:#5B6B7C;color:#fff;font-size:11px" }, ["Güncelleme: " + k.guncelleme])
+        ]));
+      }
+
+      // Belirsizlik tablosu
+      if (k.belirsizlik) {
+        var bSatir = Object.keys(k.belirsizlik).map(function (gaz) {
+          return el("div", { style: "display:flex;gap:10px;padding:4px 0;border-bottom:1px solid var(--cizgi,#eee);font-size:12.5px" }, [
+            el("div", { style: "min-width:90px;font-weight:600;text-transform:uppercase;font-size:11px;color:var(--soluk)" }, [gaz]),
+            el("div", { style: "flex:1" }, [k.belirsizlik[gaz]])
+          ]);
+        });
+        satirlar.push(el("div", { style: "margin-bottom:10px" }, [
+          el("div", { style: "font-size:12px;color:var(--soluk,#888);margin-bottom:4px" }, ["B E L İ R S İ Z L İ K   ( IPCC Tier 1 )"]),
+          el("div", null, bSatir)
+        ]));
+      }
+
+      // TSRS referansı
+      if (k.tsrs_ref) {
+        satirlar.push(el("div", { style: "margin-bottom:6px" }, [
+          el("b", { style: "color:var(--vurgu,#B4642D);font-size:12.5px" }, [k.tsrs_ref])
+        ]));
+      }
+
+      // İlgili IPCC aracı
+      if (k.ipcc_arac && k.ipcc_arac !== "—") {
+        satirlar.push(el("div", { style: "font-size:11.5px;color:var(--soluk)" }, [
+          "İlgili IPCC aracı: " + k.ipcc_arac
+        ]));
+      }
+
+      kok.appendChild(UI.kart(k.ad, satirlar, { mini: anahtar }));
+    });
+  }
+
+  /* ============================================================
+     SAYFA: IPCC HESAP ARAÇLARI (Sprint 4)
+     CHP kojenerasyon, gelişmiş HFC/PFC ve belirsizlik hesaplayıcıları.
+     Her araç canlı (girdi değiştikçe sonuç güncellenir). ============================================================ */
+  function cizAraclar(kok) {
+    kok.appendChild(el("div", { class: "bilgi" }, [
+      "IPCC GHG Protokolü yardımcı araçları. Bu hesaplayıcılar bağımsız çalışır; sonuçları ilgili veri giriş " +
+      "sayfalarına veya rapora elle aktarabilirsiniz. İleride (Sprint 5) hesaplama motoruna otomatik bağlanacaklar."
+    ]));
+
+    /* ---- ARAÇ 1: CHP (Kojenerasyon) ---- */
+    (function () {
+      var izgara = el("div", { class: "form-izgara" });
+      var sonuc = el("div", { class: "bilgi", style: "margin:14px 0 0" });
+      var aTop = UI.alan({ anahtar: "toplamTCO2e", etiket: "Toplam Yanma Emisyonu (tCO2e)", tip: "sayi",
+        yardim: "Kojenerasyon tesisinin yakıt yanmasından toplam emisyonu" });
+      var aE = UI.alan({ anahtar: "elektrikMWh", etiket: "Üretilen Elektrik (MWh)", tip: "sayi" });
+      var aI = UI.alan({ anahtar: "isiMWh", etiket: "Üretilen Faydalı Isı (MWh)", tip: "sayi" });
+      var aVE = UI.alan({ anahtar: "elektrikVerim", etiket: "Elektrik Verimi (η)", tip: "sayi",
+        yardim: "Boş bırakılırsa 0,35 (tipik)" });
+      var aVI = UI.alan({ anahtar: "isiVerim", etiket: "Isı Verimi (η)", tip: "sayi",
+        yardim: "Boş bırakılırsa 0,80 (tipik)" });
+      function hesapla() {
+        var g = UI.degerler(izgara);
+        var r = Motor.hesapCHP(g);
+        if (r.hata) { sonuc.className = "bilgi"; sonuc.innerHTML = "<b>Hesap bekleniyor:</b> " + UI.kacir(r.hata); }
+        else {
+          sonuc.className = "bilgi yesil";
+          sonuc.innerHTML = "<b>Elektriğe atfedilen:</b> " + Motor.fmt(r.elektrikPayi, 2) + " tCO2e (" +
+            Motor.fmt(r.oranE * 100, 1) + "%) &nbsp;•&nbsp; <b>Isıya atfedilen:</b> " + Motor.fmt(r.isiPayi, 2) +
+            " tCO2e (" + Motor.fmt(r.oranI * 100, 1) + "%)<br><span style='font-size:11.5px'>" + UI.kacir(r.aciklama) +
+            " — elektrik payı genellikle Kapsam 2 (satış) veya Kapsam 1; ısı payı tesis Kapsam 1 olarak raporlanır.</span>";
+        }
+      }
+      [aTop, aE, aI, aVE, aVI].forEach(function (a) {
+        a.girdi.addEventListener("input", hesapla);
+        izgara.appendChild(a);
+      });
+      hesapla();
+      kok.appendChild(UI.kart("CHP — Kojenerasyon Emisyon Paylaşımı", [
+        el("p", { style: "margin:0 0 12px;font-size:12.5px;color:var(--soluk)" },
+          ["Tek yakıttan hem elektrik hem ısı üreten sistemlerde toplam emisyonu verimlilik yöntemiyle iki çıktıya bölüştürür. " +
+           "GHG Protocol CHP Tool yöntemi. Maden sahasında kojenerasyon varsa kullanılır."]),
+        izgara, sonuc
+      ], { mini: "CHP_tool_v1.0" }));
+    })();
+
+    /* ---- ARAÇ 2: Gelişmiş HFC/PFC ---- */
+    (function () {
+      var izgara = el("div", { class: "form-izgara" });
+      var sonuc = el("div", { class: "bilgi", style: "margin:14px 0 0" });
+      var gazlar = Depo.set("kip_ar6").map(function (r) { return r.Gas_Name; }).filter(Boolean);
+      var aGaz = UI.alan({ anahtar: "gaz", etiket: "Gaz", tip: "metin", datalist: gazlar,
+        yardim: "örn. HFC-134a, R-410A, PFC-14" });
+      var aMS = UI.alan({ anahtar: "montajSarj", etiket: "Yeni Ekipman İlk Dolum (kg)", tip: "sayi" });
+      var aMK = UI.alan({ anahtar: "montajKayipOran", etiket: "Montaj Kayıp Oranı", tip: "sayi", yardim: "Boş=0,01" });
+      var aIS = UI.alan({ anahtar: "isletmeSarj", etiket: "İşletmedeki Toplam Gaz (kg)", tip: "sayi" });
+      var aIK = UI.alan({ anahtar: "isletmeKayipOran", etiket: "Yıllık İşletme Kayıp Oranı", tip: "sayi", yardim: "Boş=0,10" });
+      var aBS = UI.alan({ anahtar: "bertarafSarj", etiket: "Sökülen Ekipmandaki Gaz (kg)", tip: "sayi" });
+      var aBK = UI.alan({ anahtar: "bertarafGeriKazanimOran", etiket: "Bertaraf Geri Kazanım Oranı", tip: "sayi", yardim: "Boş=0,70" });
+      function hesapla() {
+        var g = UI.degerler(izgara);
+        var r = Motor.hesapHFCgelismis(g);
+        if (r.hata) { sonuc.className = "bilgi"; sonuc.innerHTML = "<b>Hesap bekleniyor:</b> " + UI.kacir(r.hata); }
+        else {
+          sonuc.className = "bilgi yesil";
+          sonuc.innerHTML = "<b>" + Motor.fmt(r.tco2e, 3) + " tCO2e</b> &nbsp;•&nbsp; Toplam kaçak: " +
+            Motor.fmt(r.kacakKg, 3) + " kg × KIP " + Motor.fmt(r.gwp, 0) + "<br><span style='font-size:11.5px'>Döküm — montaj: " +
+            Motor.fmt(r.dokum.montaj, 2) + " kg • işletme: " + Motor.fmt(r.dokum.isletme, 2) + " kg • bertaraf: " +
+            Motor.fmt(r.dokum.bertaraf, 2) + " kg</span>";
+        }
+      }
+      [aGaz, aMS, aMK, aIS, aIK, aBS, aBK].forEach(function (a) {
+        a.girdi.addEventListener("input", hesapla);
+        izgara.appendChild(a);
+      });
+      hesapla();
+      kok.appendChild(UI.kart("Gelişmiş HFC/PFC Envanteri (Yaşam Döngüsü)", [
+        el("p", { style: "margin:0 0 12px;font-size:12.5px;color:var(--soluk)" },
+          ["IPCC Tier 2 yaşam döngüsü yöntemi: yıllık kaçak = montaj kaybı + işletme kaybı + bertaraf kaybı. " +
+           "Soğutucu/Kaçak sayfasındaki Kütle Dengesi ve Tarama yöntemlerine alternatiftir; daha ayrıntılı envanter sağlar."]),
+        izgara, sonuc
+      ], { mini: "hfc-pfc_1.xls", kapsam: "k1" }));
+    })();
+
+    /* ---- ARAÇ 3: Belirsizlik (mevcut envanterden) ---- */
+    (function () {
+      var sonuc = el("div", { class: "bilgi", style: "margin:0" });
+      function hesapla() {
+        // Mevcut envanterin toplamlarından kaynak listesi oluştur
+        var T = Motor.toplamlar();
+        var kaynaklar = [];
+        if (T.k1.sabit) kaynaklar.push({ ad: "Sabit Yanma", emisyon: T.k1.sabit, aktiviteBelirsizlik: 3, efBelirsizlik: 5 });
+        if (T.k1.mobil) kaynaklar.push({ ad: "Mobil Yanma", emisyon: T.k1.mobil, aktiviteBelirsizlik: 5, efBelirsizlik: 15 });
+        if (T.k1.proses) kaynaklar.push({ ad: "Proses", emisyon: T.k1.proses, aktiviteBelirsizlik: 5, efBelirsizlik: 20 });
+        if (T.k1.kacak) kaynaklar.push({ ad: "Kaçak (F-gaz)", emisyon: T.k1.kacak, aktiviteBelirsizlik: 10, efBelirsizlik: 50 });
+        if (T.k2ld) kaynaklar.push({ ad: "Kapsam 2 Elektrik", emisyon: T.k2ld, aktiviteBelirsizlik: 2, efBelirsizlik: 8 });
+        if (T.k3.toplam) kaynaklar.push({ ad: "Kapsam 3", emisyon: T.k3.toplam, aktiviteBelirsizlik: 15, efBelirsizlik: 30 });
+
+        if (!kaynaklar.length) {
+          sonuc.className = "bilgi";
+          sonuc.innerHTML = "Henüz emisyon verisi girilmemiş. Faaliyet, Soğutucu ve Elektrik sayfalarına veri girdikçe " +
+            "belirsizlik aralığı burada otomatik hesaplanacak.";
+          return;
+        }
+        var b = Motor.belirsizlikBilesik(kaynaklar);
+        var satirlar = kaynaklar.map(function (k) {
+          var ub = Math.sqrt(Math.pow(k.aktiviteBelirsizlik / 100, 2) + Math.pow(k.efBelirsizlik / 100, 2)) * 100;
+          return "<tr><td>" + UI.kacir(k.ad) + "</td><td style='text-align:right'>" + Motor.fmt(k.emisyon, 2) +
+            "</td><td style='text-align:right'>±" + Motor.fmt(k.aktiviteBelirsizlik, 0) + "%</td><td style='text-align:right'>±" +
+            Motor.fmt(k.efBelirsizlik, 0) + "%</td><td style='text-align:right'>±" + Motor.fmt(ub, 1) + "%</td></tr>";
+        }).join("");
+        sonuc.className = "";
+        sonuc.innerHTML = "<div class='tablo-sar'><table class='veri'><thead><tr><th>Kaynak</th><th style='text-align:right'>tCO2e</th>" +
+          "<th style='text-align:right'>Aktivite</th><th style='text-align:right'>EF</th><th style='text-align:right'>Bileşik</th></tr></thead><tbody>" +
+          satirlar + "</tbody></table></div>" +
+          "<div class='bilgi yesil' style='margin:14px 0 0'><b>Toplam: " + Motor.fmt(b.toplamEmisyon, 2) +
+          " tCO2e ± " + Motor.fmt(b.bilesikBelirsizlikYuzde, 1) + "%</b><br>" +
+          "%95 güven aralığı (yaklaşık): " + Motor.fmt(b.altSinir, 2) + " – " + Motor.fmt(b.ustSinir, 2) + " tCO2e" +
+          "<br><span style='font-size:11.5px'>IPCC Tier 1 karekök-kareler-toplamı • TSRS 1 md. 77-82</span></div>";
+      }
+      hesapla();
+      kok.appendChild(UI.kart("Belirsizlik Analizi (Tier 1)", [
+        el("p", { style: "margin:0 0 12px;font-size:12.5px;color:var(--soluk)" },
+          ["Mevcut envanterinizin toplam belirsizlik aralığını, her kaynak için varsayılan IPCC Tier 1 belirsizlik " +
+           "değerleriyle hesaplar. Aktivite ve EF belirsizlikleri karekök-kareler-toplamı ile birleştirilir. " +
+           "Varsayılan belirsizlik değerleri Veri Kütüphanesi sayfasında listelenmiştir."]),
+        sonuc
+      ], { mini: "ghg-uncertainty.xlsx • TSRS 1 md. 77-82" }));
+    })();
   }
 
   /* ============================================================
@@ -538,10 +747,25 @@ window.UI = (function () {
         el("div", { class: "alan genis", style: "grid-column:1/-1" }, [el("label", null, ["Not / Dayanak"]), notG])
       ]);
       if (m.tip === "hesap") {
-        girisAlani.insertBefore(
-          el("div", { class: "bilgi", style: "grid-column:1/-1;margin:0 0 4px;font-size:11.5px" },
-            ["Bu metrik ileride hesaplama motoruna bağlanacak (Sprint 5). Şimdilik elle girebilir veya boş bırakabilirsiniz."]),
-          girisAlani.firstChild);
+        var oneri = (window.Motor && Motor.metrikOnerilenDeger) ? Motor.metrikOnerilenDeger(m) : null;
+        if (oneri && oneri.deger != null) {
+          var oneriKutu = el("div", { class: "bilgi yesil", style: "grid-column:1/-1;margin:0 0 4px;font-size:12px" }, [
+            el("span", null, ["Motor hesabı: ", el("b", null, [Motor.fmt(oneri.deger, 2) + " " + oneri.birim]),
+              oneri.kismi ? " (kısmi)" : "", " — " + oneri.kaynak]),
+            el("button", { class: "btn kucuk birincil", type: "button", style: "margin-left:10px",
+              onclick: function () {
+                Depo.metrikYaz(m.kod, "deger", String(Math.round(oneri.deger * 1000) / 1000));
+                Depo.metrikYaz(m.kod, "birim", oneri.birim);
+                UI.ciz();
+              } }, ["Motordan al"])
+          ]);
+          girisAlani.insertBefore(oneriKutu, girisAlani.firstChild);
+        } else {
+          girisAlani.insertBefore(
+            el("div", { class: "bilgi", style: "grid-column:1/-1;margin:0 0 4px;font-size:11.5px" },
+              ["Bu metrik ileride hesaplama motoruna bağlanacak (Sprint 5). Şimdilik elle girebilir veya boş bırakabilirsiniz."]),
+            girisAlani.firstChild);
+        }
       }
     }
 

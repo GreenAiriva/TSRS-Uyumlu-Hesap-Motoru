@@ -455,6 +455,71 @@ window.Admin = (function () {
       dosyaGirdi
     ]));
 
+    /* ---- ŞİRKET VERİ PAKETİ (Sprint 7) ---- */
+    var paketGirdi = el("input", { type: "file", accept: ".json,application/json", style: "font:inherit;font-size:13px" });
+    paketGirdi.addEventListener("change", function () {
+      var f = paketGirdi.files[0];
+      if (!f) return;
+      var okuyucu = new FileReader();
+      okuyucu.onload = function () {
+        UI.onayla("Şirket paketi yüklenince mevcut şirket verisi (profil, faaliyet, metrikler) bu dosyadakilerle DEĞİŞTİRİLİR. Referans tabloları etkilenmez. Devam edilsin mi?", function () {
+          var hata = Depo.sirketPaketiYukle(String(okuyucu.result));
+          if (hata) UI.bildir(hata, true);
+          else { UI.bildir("Şirket paketi yüklendi"); UI.ciz(); }
+        });
+      };
+      okuyucu.readAsText(f, "utf-8");
+    });
+    kok.appendChild(UI.kart("Şirket Veri Paketi (çok-şirketli taşıma)", [
+      el("p", { style: "margin:0 0 12px;font-size:13px" },
+        ["Tek bir şirketin tüm verisini (profil + faaliyet + soğutucu + elektrik + TSRS modülleri + sektör metrikleri) " +
+         "dışa aktarır. Ortak emisyon faktörü tabloları dahil edilmez. Birden fazla şirketi ayrı dosyalarda yönetmek veya " +
+         "arşivlemek için idealdir."]),
+      el("div", { style: "display:flex;gap:10px;flex-wrap:wrap;align-items:center" }, [
+        el("button", { class: "btn birincil", type: "button", onclick: function () {
+          Depo.sirketPaketiAl(); UI.bildir("Şirket paketi indiriliyor");
+        } }, ["⬇ Şirket Paketini İndir"]),
+        el("span", { style: "font-size:12.5px;color:var(--soluk)" }, ["veya yükle:"]),
+        paketGirdi
+      ])
+    ], { kapsam: "k1" }));
+
+    /* ---- CSV FAALİYET İÇE AKTARMA (Sprint 7) ---- */
+    var csvGirdi = el("input", { type: "file", accept: ".csv,text/csv", style: "font:inherit;font-size:13px" });
+    var csvSonuc = el("div", { style: "margin-top:10px" });
+    csvGirdi.addEventListener("change", function () {
+      var f = csvGirdi.files[0];
+      if (!f) return;
+      var okuyucu = new FileReader();
+      okuyucu.onload = function () {
+        var r = Depo.csvFaaliyetIceAktar(String(okuyucu.result));
+        if (r.hatalar.length) {
+          csvSonuc.innerHTML = "";
+          csvSonuc.appendChild(el("div", { class: "bilgi", style: "border-left-color:var(--oksit)" },
+            ["İçe aktarım yapılamadı: " + UI.kacir(r.hatalar.join(" • "))]));
+        } else {
+          csvSonuc.innerHTML = "";
+          csvSonuc.appendChild(el("div", { class: "bilgi yesil" },
+            [el("b", null, [r.eklenen + " faaliyet kaydı eklendi"]),
+             r.atlanan ? " • " + r.atlanan + " satır atlandı (eksik/geçersiz veri)" : "",
+             ". Faaliyet Verisi sayfasından kontrol edip kaynak/birim eşleştirmesini tamamlayabilirsiniz."]));
+          UI.bildir(r.eklenen + " kayıt içe aktarıldı");
+        }
+        csvGirdi.value = "";
+      };
+      okuyucu.readAsText(f, "utf-8");
+    });
+    kok.appendChild(UI.kart("CSV ile Faaliyet İçe Aktarma", [
+      el("p", { style: "margin:0 0 10px;font-size:13px" },
+        ["Müşteriden gelen faaliyet verisini CSV dosyasından toplu yükleyin. Başlık satırı esnek eşlenir; " +
+         "en az “kategori” ve “miktar” sütunları bulunmalıdır. Türkçe sayı biçimi (1.234,56) otomatik dönüştürülür; " +
+         "ayırıcı olarak hem virgül hem noktalı virgül desteklenir."]),
+      el("div", { class: "bilgi", style: "font-size:12px;margin-bottom:10px" },
+        ["Tanınan başlıklar: tesis, kategori, kaynak, miktar, birim, donem, aciklama. " +
+         "Örnek: ", el("code", null, ["tesis;kategori;kaynak;miktar;birim;donem"])]),
+      csvGirdi, csvSonuc
+    ]));
+
     function sifirlaDugme(etiket, neler, uyari) {
       return el("button", { class: "btn tehlike", type: "button", style: "margin-right:10px;margin-bottom:10px", onclick: function () {
         UI.onayla(uyari, function () { Depo.sifirla(neler); UI.bildir("Sıfırlandı"); UI.ciz(); });

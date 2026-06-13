@@ -388,5 +388,130 @@ window.Motor = (function () {
     return M.fmt(100 * pay / payda, 1) + "%";
   };
 
+  /* ============================================================
+     SPRINT 4 — IPCC ARAÇLARI ENTEGRASYONU
+     CHP (kojenerasyon), gelişmiş HFC/PFC ve Tier 1 belirsizlik modülleri.
+     Bu fonksiyonlar bağımsız hesaplayıcılardır; arayüz tarafından çağrılır.
+     ============================================================ */
+
+  /* ---- CHP (Kojenerasyon) — Verimlilik Yöntemi ----
+     Tek yakıttan hem elektrik hem ısı üreten sistemde toplam yanma emisyonunu
+     elektrik ve ısı çıktılarına verimlilik temelli pay eder (GHG Protocol CHP Tool yöntemi).
+     Girdi: toplamTCO2e (yakıt yanması toplam emisyonu), elektrikMWh, isiMWh,
+            elektrikVerim (varsayılan 0,35), isiVerim (varsayılan 0,80)
+     Dönen: { elektrikPayi, isiPayi, oranE, oranI, hata } (tCO2e) */
+  M.hesapCHP = function (g) {
+    var bos = { elektrikPayi: 0, isiPayi: 0, oranE: 0, oranI: 0, hata: null };
+    var toplam = sayi(g.toplamTCO2e);
+    var eMWh = sayi(g.elektrikMWh), iMWh = sayi(g.isiMWh);
+    if (!toplam) return Object.assign(bos, { hata: "Toplam yanma emisyonu (tCO2e) girilmedi" });
+    if (!eMWh && !iMWh) return Object.assign(bos, { hata: "Elektrik veya ısı çıktısı girilmedi" });
+    var nE = sayi(g.elektrikVerim) || 0.35;  // tipik elektrik verimi
+    var nI = sayi(g.isiVerim) || 0.80;       // tipik ısı verimi
+    // Verimlilik yöntemi: her çıktının "yakıt eşdeğeri" = çıktı / verim
+    var yakitE = eMWh / nE;
+    var yakitI = iMWh / nI;
+    var toplamYakit = yakitE + yakitI;
+    if (!toplamYakit) return Object.assign(bos, { hata: "Verim değerleri geçersiz" });
+    var oranE = yakitE / toplamYakit;
+    var oranI = yakitI / toplamYakit;
+    return {
+      elektrikPayi: toplam * oranE,
+      isiPayi: toplam * oranI,
+      oranE: oranE, oranI: oranI,
+      hata: null,
+      aciklama: "Verimlilik Yöntemi (elektrik η=" + nE + ", ısı η=" + nI + ")"
+    };
+  };
+
+  /* ---- Gelişmiş HFC/PFC Envanteri — IPCC Tier 2 (yaşam döngüsü) ----
+     hfc-pfc_1.xls yöntemi: yıl içindeki kaçak = montaj kaybı + işletme (yıllık) kaybı + bertaraf kaybı.
+     Girdi: gaz, montajSarj (yeni ekipmana ilk dolum kg), montajKayipOran (varsayılan 0,01),
+            isletmeSarj (mevcut bankada kg), isletmeKayipOran (yıllık, varsayılan 0,10),
+            bertarafSarj (sökülen ekipmandaki kg), bertarafGeriKazanimOran (varsayılan 0,70)
+     Dönen: { kacakKg, gwp, tco2e, dokum, hata } */
+  M.hesapHFCgelismis = function (g) {
+    var sonuc = { kacakKg: 0, gwp: null, tco2e: 0, dokum: {}, hata: null };
+    var gwp = M.gwpBul(g.gaz);
+    if (!g.gaz) { sonuc.hata = "Gaz seçilmedi"; return sonuc; }
+    if (gwp == null) { sonuc.hata = "KIP bulunamadı: " + g.gaz; return sonuc; }
+    sonuc.gwp = gwp;
+    var montaj = sayi(g.montajSarj) * (sayi(g.montajKayipOran) || 0.01);
+    var isletme = sayi(g.isletmeSarj) * (sayi(g.isletmeKayipOran) || 0.10);
+    var bertarafKalan = sayi(g.bertarafSarj) * (1 - (sayi(g.bertarafGeriKazanimOran) || 0.70));
+    sonuc.dokum = { montaj: montaj, isletme: isletme, bertaraf: bertarafKalan };
+    sonuc.kacakKg = montaj + isletme + bertarafKalan;
+    sonuc.tco2e = sonuc.kacakKg * gwp / 1000;
+    sonuc.aciklama = "IPCC Tier 2 yaşam döngüsü (montaj+işletme+bertaraf)";
+    return sonuc;
+  };
+
+  /* ---- Tier 1 Belirsizlik Birleştirme ----
+     Bir kaynak için: bileşik = √(aktivite² + EF²)
+     Çoklu kaynak için: emisyonla ağırlıklı karekök-kareler-toplamı
+     Girdi: kaynaklar = [{ emisyon(tCO2e), aktiviteBelirsizlik(%), efBelirsizlik(%) }]
+     Dönen: { toplamEmisyon, bilesikBelirsizlikYuzde, altSinir, ustSinir } */
+  M.belirsizlikBilesik = function (kaynaklar) {
+    if (!kaynaklar || !kaynaklar.length) return { toplamEmisyon: 0, bilesikBelirsizlikYuzde: 0, altSinir: 0, ustSinir: 0 };
+    var toplamE = 0, agirlikliKareToplam = 0;
+    kaynaklar.forEach(function (k) {
+      var e = sayi(k.emisyon);
+      var ua = sayi(k.aktiviteBelirsizlik) / 100;
+      var ue = sayi(k.efBelirsizlik) / 100;
+      var uBilesik = Math.sqrt(ua * ua + ue * ue); // kaynak bileşik belirsizliği (oran)
+      toplamE += e;
+      // emisyonla ağırlıklı: (E_i × U_i)²
+      agirlikliKareToplam += Math.pow(e * uBilesik, 2);
+    });
+    if (!toplamE) return { toplamEmisyon: 0, bilesikBelirsizlikYuzde: 0, altSinir: 0, ustSinir: 0 };
+    var toplamBelirsizlikMutlak = Math.sqrt(agirlikliKareToplam);
+    var yuzde = (toplamBelirsizlikMutlak / toplamE) * 100;
+    return {
+      toplamEmisyon: toplamE,
+      bilesikBelirsizlikYuzde: yuzde,
+      altSinir: toplamE * (1 - yuzde / 100),
+      ustSinir: toplamE * (1 + yuzde / 100)
+    };
+  };
+
+  /* ============================================================
+     SPRINT 5 — SEKTÖR METRİK HESAPLAMA KÖPRÜSÜ
+     "hesap" tipli sektör metriklerini mevcut envanterden otomatik besler.
+     Ortak metrik anahtarına (k1/su/enerji/sogutucu) göre motor değerini döner.
+     Böylece kullanıcı aynı veriyi iki kez girmez: Faaliyet/Elektrik sayfalarına
+     girilen veri, sektör metriklerine otomatik yansır (tek-hesap ilkesi).
+     ============================================================ */
+  // Bir ortak metrik anahtarı için motorun hesapladığı değeri döner.
+  // Dönen: { deger, birim, kaynak } veya null (motor besleyemiyorsa)
+  M.ortakMetrikDegeri = function (ortakAnahtar) {
+    var T = M.toplamlar();
+    switch (ortakAnahtar) {
+      case "k1":
+        return { deger: T.k1.toplam, birim: "tCO2e",
+                 kaynak: "Faaliyet + Soğutucu sayfalarından (Kapsam 1 toplamı)" };
+      case "sogutucu":
+        return { deger: T.k1.kacak, birim: "tCO2e",
+                 kaynak: "Soğutucu/Kaçak sayfasından (florlu gaz emisyonu)" };
+      case "enerji":
+        // Toplam enerji: elektrik (kWh→GJ) + sabit yanma yakıt enerjisi yaklaşık
+        // Şimdilik yalnızca elektrik tüketimini GJ'e çevirip döneriz (kısmi)
+        var gj = T.k2.kwh * 0.0036; // 1 kWh = 0,0036 GJ
+        return { deger: gj, birim: "GJ",
+                 kaynak: "Kapsam 2 elektrik tüketiminden (kısmi; yakıt enerjisi Sprint 5+ ile eklenecek)",
+                 kismi: true };
+      case "su":
+        return null; // Su verisi motor tarafından hesaplanmıyor; kullanıcı girer
+      default:
+        return null;
+    }
+  };
+
+  // Bir sektör metriği için "önerilen" motor değerini döner (varsa).
+  // metrik: aktifMetrikler() öğesi { kod, ortak, tip, ... }
+  M.metrikOnerilenDeger = function (metrik) {
+    if (metrik.tip !== "hesap" || !metrik.ortak) return null;
+    return M.ortakMetrikDegeri(metrik.ortak);
+  };
+
   return M;
 })();
