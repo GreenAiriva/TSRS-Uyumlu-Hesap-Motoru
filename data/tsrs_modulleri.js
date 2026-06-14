@@ -16,30 +16,41 @@ VERI.tsrs_modulleri = [
  {
   "id": "yonetisim",
   "baslik": "Yönetişim Açıklamaları",
-  "referans": "TSRS 1 md. 26-27 • TSRS 2 md. 5-7",
-  "aciklama": "Sürdürülebilirlik ve iklimle ilgili risk/fırsatları gözeten organlar ile yönetimin rolünü açıklayın.",
+  "referans": "TSRS 1 md. 26-27 (sürdürülebilirlik) • TSRS 2 md. 5-7 (iklim)",
+  "aciklama": "Yönetişim açıklamaları iki kapsamda ayrı verilir: (1) Sürdürülebilirlik — tüm sürdürülebilirlikle ilgili risk ve fırsatların gözetimi (TSRS 1); (2) İklim — özel olarak iklimle ilgili risk ve fırsatların gözetimi (TSRS 2). Aynı organ her ikisini de gözetebilir; yine de her iki kapsam için ayrı açıklama beklenir.",
+  "gruplar": [
+   {"id": "surdurulebilirlik", "baslik": "Sürdürülebilirlik Yönetişimi", "referans": "TSRS 1 md. 26-27 — sürdürülebilirlikle ilgili risk ve fırsatlar"},
+   {"id": "iklim", "baslik": "İklim Yönetişimi", "referans": "TSRS 2 md. 5-7 — iklimle ilgili risk ve fırsatlar"}
+  ],
   "tablo": {
    "etiket": "Gözetimden sorumlu organlar ve kişiler",
    "sutunlar": [
     {"anahtar": "organ", "etiket": "Organ / Kişi Adı", "tip": "metin"},
+    {"anahtar": "kapsam", "etiket": "Kapsam", "tip": "secim", "liste": ["Sürdürülebilirlik", "İklim", "Her ikisi"]},
     {"anahtar": "tur", "etiket": "Tür", "tip": "secim", "liste": "organ_turu"},
     {"anahtar": "rapor_merci", "etiket": "Raporladığı Merci", "tip": "metin"},
     {"anahtar": "toplanti", "etiket": "Toplantı Sıklığı", "tip": "secim", "liste": ["Aylık", "Üç Aylık", "Altı Aylık", "Yıllık", "Gerektiğinde"]},
-    {"anahtar": "bilgilendirme", "etiket": "İklim Bilgilendirme Sıklığı", "tip": "secim", "liste": ["Her toplantıda", "Üç Aylık", "Altı Aylık", "Yıllık"]},
-    {"anahtar": "uzman", "etiket": "İklim Uzmanı Üye", "tip": "sayi"},
+    {"anahtar": "bilgilendirme", "etiket": "Bilgilendirme Sıklığı", "tip": "secim", "liste": ["Her toplantıda", "Üç Aylık", "Altı Aylık", "Yıllık"]},
+    {"anahtar": "uzman", "etiket": "Uzman Üye", "tip": "sayi"},
     {"anahtar": "toplam_uye", "etiket": "Toplam Üye", "tip": "sayi"},
     {"anahtar": "yetki_ref", "etiket": "Yetki Belgesi Ref.", "tip": "metin"},
     {"anahtar": "not", "etiket": "Notlar", "tip": "metin"}
    ]
   },
   "anlatilar": [
-   {"anahtar": "sorumluluk", "etiket": "Sorumlulukların görev tanımlarına yansıtılması", "yardim": "TSRS 1 md. 27(a)(i) — İklim sorumlulukları yönetmelik, komite görev tanımı veya politikalarda nasıl yer alıyor?"},
-   {"anahtar": "yetkinlik", "etiket": "Yetkinliklerin belirlenmesi ve geliştirilmesi", "yardim": "md. 27(a)(ii) — Organın iklim konusundaki yetkinliği nasıl sağlanıyor (eğitim, danışmanlık, işe alım)?"},
-   {"anahtar": "bilgilendirme_sureci", "etiket": "Organın bilgilendirilme süreci", "yardim": "md. 27(a)(iii) — Organ, iklim risk ve fırsatları hakkında hangi süreçle ve sıklıkla bilgilendiriliyor?"},
-   {"anahtar": "strateji_gozetim", "etiket": "Strateji ve büyük işlem kararlarında iklim gözetimi", "yardim": "md. 27(a)(iv) — Strateji, büyük işlemler ve risk yönetimi kararlarında iklim nasıl dikkate alınıyor?"},
-   {"anahtar": "hedef_gozetim", "etiket": "Hedef belirleme ve ilerlemenin gözetimi", "yardim": "md. 27(a)(v) — Hedeflerin belirlenmesi ve izlenmesi organ tarafından nasıl gözetiliyor?"},
-   {"anahtar": "ucretlendirme", "etiket": "Ücretlendirme bağlantısı", "yardim": "TSRS 2 md. 29(g) — Yönetici ücretlendirmesi iklim performansına bağlı mı? Nasıl?"},
-   {"anahtar": "yonetim_rolu", "etiket": "Yönetimin rolü ve devredilen yetkiler", "yardim": "md. 27(b) — Üst yönetimin günlük yönetimdeki rolü, kullanılan kontroller ve prosedürler."}
+   {"anahtar": "s_sorumluluk", "grup": "surdurulebilirlik", "etiket": "Sorumlulukların görev tanımlarına yansıtılması", "yardim": "TSRS 1 md. 27(a)(i) — Sürdürülebilirlik sorumlulukları yönetmelik, komite görev tanımı veya politikalarda nasıl yer alıyor?"},
+   {"anahtar": "s_yetkinlik", "grup": "surdurulebilirlik", "etiket": "Yetkinliklerin belirlenmesi ve geliştirilmesi", "yardim": "md. 27(a)(ii) — Organın sürdürülebilirlik konusundaki yetkinliği nasıl sağlanıyor (eğitim, danışmanlık, işe alım)?"},
+   {"anahtar": "s_bilgilendirme_sureci", "grup": "surdurulebilirlik", "etiket": "Organın bilgilendirilme süreci", "yardim": "md. 27(a)(iii) — Organ, sürdürülebilirlik risk ve fırsatları hakkında hangi süreçle ve sıklıkla bilgilendiriliyor?"},
+   {"anahtar": "s_strateji_gozetim", "grup": "surdurulebilirlik", "etiket": "Strateji ve büyük işlem kararlarında gözetim", "yardim": "md. 27(a)(iv) — Strateji, büyük işlemler ve risk yönetimi kararlarında sürdürülebilirlik nasıl dikkate alınıyor?"},
+   {"anahtar": "s_hedef_gozetim", "grup": "surdurulebilirlik", "etiket": "Hedef belirleme ve ilerlemenin gözetimi", "yardim": "md. 27(a)(v) — Sürdürülebilirlik hedeflerinin belirlenmesi ve izlenmesi organ tarafından nasıl gözetiliyor?"},
+   {"anahtar": "s_yonetim_rolu", "grup": "surdurulebilirlik", "etiket": "Yönetimin rolü ve devredilen yetkiler", "yardim": "md. 27(b) — Üst yönetimin sürdürülebilirlik günlük yönetimindeki rolü, kullanılan kontroller ve prosedürler."},
+   {"anahtar": "i_sorumluluk", "grup": "iklim", "etiket": "Sorumlulukların görev tanımlarına yansıtılması", "yardim": "TSRS 2 md. 6(a)(i) — İklim sorumlulukları yönetmelik, komite görev tanımı veya politikalarda nasıl yer alıyor?"},
+   {"anahtar": "i_yetkinlik", "grup": "iklim", "etiket": "Yetkinliklerin belirlenmesi ve geliştirilmesi", "yardim": "TSRS 2 md. 6(a)(ii) — Organın iklim konusundaki yetkinliği nasıl sağlanıyor (eğitim, danışmanlık, işe alım)?"},
+   {"anahtar": "i_bilgilendirme_sureci", "grup": "iklim", "etiket": "Organın bilgilendirilme süreci", "yardim": "TSRS 2 md. 6(a)(iii) — Organ, iklim risk ve fırsatları hakkında hangi süreçle ve sıklıkla bilgilendiriliyor?"},
+   {"anahtar": "i_strateji_gozetim", "grup": "iklim", "etiket": "Strateji ve büyük işlem kararlarında iklim gözetimi", "yardim": "TSRS 2 md. 6(a)(iv) — Strateji, büyük işlemler ve risk yönetimi kararlarında iklim nasıl dikkate alınıyor?"},
+   {"anahtar": "i_hedef_gozetim", "grup": "iklim", "etiket": "Hedef belirleme ve ilerlemenin gözetimi", "yardim": "TSRS 2 md. 6(a)(v) — İklim hedeflerinin belirlenmesi ve izlenmesi organ tarafından nasıl gözetiliyor?"},
+   {"anahtar": "i_ucretlendirme", "grup": "iklim", "etiket": "Ücretlendirme bağlantısı", "yardim": "TSRS 2 md. 6(a)(v) son cümle / md. 29(g) — Yönetici ücretlendirmesi iklim performansına bağlı mı? Nasıl?"},
+   {"anahtar": "i_yonetim_rolu", "grup": "iklim", "etiket": "Yönetimin rolü ve devredilen yetkiler", "yardim": "TSRS 2 md. 6(b) — Üst yönetimin iklim günlük yönetimindeki rolü, kullanılan kontroller ve prosedürler."}
   ]
  },
  {

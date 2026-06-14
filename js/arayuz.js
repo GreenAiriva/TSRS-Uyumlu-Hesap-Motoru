@@ -1266,24 +1266,56 @@ window.UI = (function () {
 
     /* Anlatı (serbest metin) alanları */
     if (m.anlatilar && m.anlatilar.length) {
-      var alanlar = el("div", { style: "display:grid;gap:16px" });
-      m.anlatilar.forEach(function (a) {
+      // Tek bir anlatı alanı için textarea + etiket üreten yardımcı
+      var anlatAlani = function (a) {
         var t = el("textarea", { value: mv.anlatilar[a.anahtar] || "", rows: "4" });
         t.addEventListener("input", function () {
           mv.anlatilar[a.anahtar] = t.value; Depo.kaydet(true);
         });
         t.addEventListener("change", function () { UI.bildir("Kaydedildi"); UI.navGuncelle(); });
-        alanlar.appendChild(el("div", { class: "alan" }, [
+        return el("div", { class: "alan" }, [
           el("label", null, [a.etiket]),
           t,
           a.yardim ? el("span", { class: "yardim" }, [a.yardim]) : null
+        ]);
+      };
+
+      if (m.gruplar && m.gruplar.length) {
+        /* Gruplu modül (örn. Yönetişim → Sürdürülebilirlik + İklim alt başlıkları).
+           Her grup ayrı bir kartta, kendi TSRS referansıyla gösterilir. */
+        kok.appendChild(el("div", { class: "bilgi", style: "font-size:12px" }, [
+          "Bu bölüm iki kapsamda ayrı doldurulur: " +
+          m.gruplar.map(function (g) { return g.baslik; }).join(" ve ") +
+          ". Her kapsam kendi standardına (TSRS 1 / TSRS 2) göre ayrı açıklanır."
         ]));
-      });
-      kok.appendChild(UI.kart("Açıklama Metinleri", [
-        el("p", { style: "margin:0 0 14px;font-size:12.5px;color:var(--soluk)" },
-          ["Bu metinler raporun ilgili bölümünde aynen yer alır. Yazdıkça otomatik kaydedilir."]),
-        alanlar
-      ], { mini: m.referans }));
+        m.gruplar.forEach(function (g) {
+          var grupAnlatlari = m.anlatilar.filter(function (a) { return a.grup === g.id; });
+          if (!grupAnlatlari.length) return;
+          var galanlar = el("div", { style: "display:grid;gap:16px" });
+          grupAnlatlari.forEach(function (a) { galanlar.appendChild(anlatAlani(a)); });
+          kok.appendChild(UI.kart(g.baslik, [
+            el("p", { style: "margin:0 0 14px;font-size:12.5px;color:var(--soluk)" },
+              ["Bu metinler raporun ilgili bölümünde aynen yer alır. Yazdıkça otomatik kaydedilir."]),
+            galanlar
+          ], { mini: g.referans }));
+        });
+        /* Gruba atanmamış anlatılar varsa (geriye uyumluluk) düz listede göster */
+        var grupsuz = m.anlatilar.filter(function (a) { return !a.grup; });
+        if (grupsuz.length) {
+          var ekAlanlar = el("div", { style: "display:grid;gap:16px" });
+          grupsuz.forEach(function (a) { ekAlanlar.appendChild(anlatAlani(a)); });
+          kok.appendChild(UI.kart("Diğer Açıklama Metinleri", [ekAlanlar], { mini: m.referans }));
+        }
+      } else {
+        /* Grupsuz (standart) modül — düz liste */
+        var alanlar = el("div", { style: "display:grid;gap:16px" });
+        m.anlatilar.forEach(function (a) { alanlar.appendChild(anlatAlani(a)); });
+        kok.appendChild(UI.kart("Açıklama Metinleri", [
+          el("p", { style: "margin:0 0 14px;font-size:12.5px;color:var(--soluk)" },
+            ["Bu metinler raporun ilgili bölümünde aynen yer alır. Yazdıkça otomatik kaydedilir."]),
+          alanlar
+        ], { mini: m.referans }));
+      }
     }
   }
 

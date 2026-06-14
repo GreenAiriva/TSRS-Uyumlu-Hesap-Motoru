@@ -226,14 +226,34 @@ window.Rapor = (function () {
       s4.appendChild(el("h2", null, [baslik || tanim.baslik]));
       s4.appendChild(el("p", { style: "font-size:10.5px;color:var(--soluk);margin:0 0 6px" }, [tanim.referans || ""]));
       var mv = mod(modulId);
-      (tanim.anlatilar || []).forEach(function (a) {
-        var metin = (mv.anlatilar || {})[a.anahtar];
-        if (metin && String(metin).trim()) {
-          s4.appendChild(el("p", { style: "margin:8px 0 2px" }, [el("b", null, [a.etiket])]));
-          s4.appendChild(anlat(metin));
-        }
-      });
-      var doluAnlat = (tanim.anlatilar || []).some(function (a) { return ((mv.anlatilar || {})[a.anahtar] || "").trim(); });
+      var doluAnlat = false;
+      // Gruplu modül (örn. Yönetişim → Sürdürülebilirlik / İklim): her grubu alt başlıkla yaz
+      if (tanim.gruplar && tanim.gruplar.length) {
+        tanim.gruplar.forEach(function (g) {
+          var grupAnlatlari = (tanim.anlatilar || []).filter(function (a) { return a.grup === g.id; });
+          var grupDolu = grupAnlatlari.some(function (a) { return ((mv.anlatilar || {})[a.anahtar] || "").trim(); });
+          if (!grupDolu) return;
+          doluAnlat = true;
+          s4.appendChild(el("h3", { style: "margin:10px 0 2px;font-size:13px" }, [g.baslik]));
+          s4.appendChild(el("p", { style: "font-size:10px;color:var(--soluk);margin:0 0 4px" }, [g.referans || ""]));
+          grupAnlatlari.forEach(function (a) {
+            var metin = (mv.anlatilar || {})[a.anahtar];
+            if (metin && String(metin).trim()) {
+              s4.appendChild(el("p", { style: "margin:6px 0 2px" }, [el("b", null, [a.etiket])]));
+              s4.appendChild(anlat(metin));
+            }
+          });
+        });
+      } else {
+        (tanim.anlatilar || []).forEach(function (a) {
+          var metin = (mv.anlatilar || {})[a.anahtar];
+          if (metin && String(metin).trim()) {
+            doluAnlat = true;
+            s4.appendChild(el("p", { style: "margin:8px 0 2px" }, [el("b", null, [a.etiket])]));
+            s4.appendChild(anlat(metin));
+          }
+        });
+      }
       if (!doluAnlat && !(mv.kayitlar || []).length) s4.appendChild(anlat(""));
     }
 
