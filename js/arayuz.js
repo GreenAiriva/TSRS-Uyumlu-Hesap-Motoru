@@ -1212,7 +1212,7 @@ window.UI = (function () {
     var izgara = el("div", { class: "form-izgara" });
     m.tablo.sutunlar.forEach(function (su) {
       izgara.appendChild(UI.alan({
-        anahtar: su.anahtar, etiket: su.etiket, tip: su.tip, liste: su.liste,
+        anahtar: su.anahtar, etiket: su.etiket, tip: su.tip, liste: su.liste, yardim: su.yardim,
         deger: kayit ? kayit[su.anahtar] : ""
       }));
     });

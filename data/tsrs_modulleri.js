@@ -55,74 +55,100 @@ VERI.tsrs_modulleri = [
  },
  {
   "id": "risk_firsat",
-  "baslik": "İklim Risk ve Fırsatları",
-  "referans": "TSRS 2 md. 9-13",
-  "aciklama": "İşletmeyi makul olarak etkileyebilecek fiziksel ve geçiş riskleri ile fırsatları kaydedin. Risk skoru (olasılık × etki) otomatik hesaplanır.",
+  "baslik": "Risk ve Fırsatlar",
+  "referans": "TSRS 1 md. 30 (sürdürülebilirlik) • TSRS 2 md. 9-13 (iklim)",
+  "aciklama": "İşletmeyi makul olarak etkileyebilecek risk ve fırsatlar iki kapsamda ayrı kaydedilir: (1) Sürdürülebilirlik — tüm sürdürülebilirlikle ilgili risk ve fırsatlar (TSRS 1 md. 30); (2) İklim — özel olarak iklimle ilgili fiziksel ve geçiş riskleri ile fırsatlar (TSRS 2 md. 9-13). Her satır tek bir risk veya fırsattır; risk skoru (olasılık × etki) otomatik hesaplanır.",
+  "gruplar": [
+   {"id": "surdurulebilirlik", "baslik": "Sürdürülebilirlik Risk ve Fırsatları", "referans": "TSRS 1 md. 30 — finansal yeterliliği etkilemesi beklenen sürdürülebilirlik risk ve fırsatları"},
+   {"id": "iklim", "baslik": "İklim Risk ve Fırsatları", "referans": "TSRS 2 md. 9-13 — fiziksel ve geçiş riskleri ile iklim fırsatları"}
+  ],
   "tablo": {
    "etiket": "Risk ve fırsat kaydı",
    "sutunlar": [
-    {"anahtar": "rid", "etiket": "ID", "tip": "metin"},
-    {"anahtar": "baslik", "etiket": "Başlık", "tip": "metin"},
-    {"anahtar": "tur", "etiket": "Tür", "tip": "secim", "liste": "risk_turu"},
-    {"anahtar": "zaman", "etiket": "Zaman Dilimi", "tip": "secim", "liste": "zaman_dilimi"},
-    {"anahtar": "olasilik", "etiket": "Olasılık (1-5)", "tip": "sayi"},
-    {"anahtar": "etki", "etiket": "Etki (1-5)", "tip": "sayi"},
-    {"anahtar": "konum", "etiket": "Değer Zinciri Konumu", "tip": "secim", "liste": "deger_zinciri_konumu"},
-    {"anahtar": "tutar", "etiket": "Niceliksel Etki (Bin TL)", "tip": "sayi"},
-    {"anahtar": "aciklama", "etiket": "Açıklama", "tip": "uzun_metin"}
+    {"anahtar": "kapsam", "etiket": "Kapsam", "tip": "secim", "liste": ["Sürdürülebilirlik (TSRS 1)", "İklim (TSRS 2)"], "yardim": "Bu kalem hangi standart kapsamında raporlanıyor? Sürdürülebilirlik genel kapsam (TSRS 1 md. 30), İklim ise özel iklim kapsamıdır (TSRS 2). Sayfadaki alt başlıklara göre ayrışır."},
+    {"anahtar": "rid", "etiket": "ID (Kısa Kod)", "tip": "metin", "yardim": "Bu kalemi izlemek için verdiğiniz kısa benzersiz kod (örn. R-01, F-03). Strateji ve diğer sayfalarda bu kalemi referans verirken kullanılır."},
+    {"anahtar": "risk_firsat", "etiket": "Risk mi, Fırsat mı?", "tip": "secim", "liste": ["Risk", "Fırsat"], "yardim": "Bu kalem işletme için olumsuz bir tehdit mi (risk) yoksa olumlu bir imkan mı (fırsat)? TSRS her ikisini de raporlamayı ister."},
+    {"anahtar": "baslik", "etiket": "Başlık / Tanım", "tip": "metin", "yardim": "Risk veya fırsatın kısa adı (örn. 'Karbon vergisi maliyet artışı', 'Su kıtlığı üretim riski'). Ne olduğunu bir bakışta anlatan başlık."},
+    {"anahtar": "tur", "etiket": "Risk Türü (Fiziksel / Geçiş)", "tip": "secim", "liste": "risk_turu", "yardim": "TSRS 2 md. 10(b): Her iklim riski fiziksel risk (akut/kronik iklim olayları — sel, kuraklık, sıcaklık) mi yoksa geçiş riski (politika, teknoloji, pazar, itibar değişimi) mi? Fırsatlar için boş bırakılabilir."},
+    {"anahtar": "zaman", "etiket": "Zaman Dilimi", "tip": "secim", "liste": "zaman_dilimi", "yardim": "TSRS 2 md. 10(c): Bu kalemin etkisinin gerçekleşmesi ne zaman bekleniyor? Kısa / orta / uzun vade (tanımları aşağıdaki alt bölümde belirtilir)."},
+    {"anahtar": "olasilik", "etiket": "Olasılık (1-5)", "tip": "sayi", "yardim": "Bu etkinin gerçekleşme olasılığı: 1 = çok düşük, 5 = çok yüksek. Etki ile çarpılarak önem skoru hesaplanır."},
+    {"anahtar": "etki", "etiket": "Etki Büyüklüğü (1-5)", "tip": "sayi", "yardim": "Gerçekleşirse işletmeye etkisinin büyüklüğü: 1 = çok küçük, 5 = çok büyük. Finansal ve operasyonel önemi yansıtır."},
+    {"anahtar": "konum", "etiket": "Değer Zinciri Konumu", "tip": "secim", "liste": "deger_zinciri_konumu", "yardim": "TSRS 2 md. 10: Bu risk/fırsat değer zincirinin neresinde yoğunlaşıyor? Kendi operasyonlarınız (doğrudan), yukarı akış (tedarikçiler) ya da aşağı akış (müşteriler/ürün kullanımı)."},
+    {"anahtar": "tutar", "etiket": "Niceliksel Etki (Bin TL)", "tip": "sayi", "yardim": "Tahmin edilebiliyorsa etkinin parasal büyüklüğü (bin TL). Zorunlu değil; bilinmiyorsa boş bırakın, anlatı açıklamada niteliksel olarak belirtin."},
+    {"anahtar": "aciklama", "etiket": "Ayrıntılı Açıklama", "tip": "uzun_metin", "yardim": "Bu risk/fırsatın nasıl ortaya çıktığı, işletmeyi hangi mekanizmayla etkilediği ve varsa alınan önlemler. Raporda bu metin kullanılır."}
    ]
   },
   "anlatilar": [
-   {"anahtar": "kisa_vade", "etiket": "Kısa vade tanımı ve gerekçesi", "yardim": "TSRS 2 md. 10(d) — örn. 3 yıla kadar; işletmenin planlama ufkuyla bağlantısı."},
-   {"anahtar": "orta_vade", "etiket": "Orta vade tanımı ve gerekçesi", "yardim": "örn. 3-10 yıl."},
-   {"anahtar": "uzun_vade", "etiket": "Uzun vade tanımı ve gerekçesi", "yardim": "örn. 10 yıldan uzun; madencilikte rezerv/ruhsat ömrüyle ilişkilendirilebilir."}
+   {"anahtar": "s_tanim", "grup": "surdurulebilirlik", "etiket": "Sürdürülebilirlik risk ve fırsatlarının genel açıklaması", "yardim": "TSRS 1 md. 30 — İşletmenin finansal yeterliliğini etkilemesi makul ölçüde beklenebilecek sürdürülebilirlik (çevresel, sosyal, yönetişim) risk ve fırsatlarının genel özeti."},
+   {"anahtar": "s_kisa_vade", "grup": "surdurulebilirlik", "etiket": "Kısa vade tanımı ve gerekçesi", "yardim": "örn. 3 yıla kadar; işletmenin planlama ufkuyla bağlantısı."},
+   {"anahtar": "s_orta_vade", "grup": "surdurulebilirlik", "etiket": "Orta vade tanımı ve gerekçesi", "yardim": "örn. 3-10 yıl."},
+   {"anahtar": "s_uzun_vade", "grup": "surdurulebilirlik", "etiket": "Uzun vade tanımı ve gerekçesi", "yardim": "örn. 10 yıldan uzun."},
+   {"anahtar": "i_tanim", "grup": "iklim", "etiket": "İklim risk ve fırsatlarının genel açıklaması", "yardim": "TSRS 2 md. 10(a) — Finansal yeterliliği etkilemesi beklenen iklimle ilgili risk ve fırsatların genel özeti ve tanımı."},
+   {"anahtar": "i_kisa_vade", "grup": "iklim", "etiket": "Kısa vade tanımı ve gerekçesi", "yardim": "TSRS 2 md. 10(d) — örn. 3 yıla kadar; stratejik planlama dönemleriyle bağlantısı."},
+   {"anahtar": "i_orta_vade", "grup": "iklim", "etiket": "Orta vade tanımı ve gerekçesi", "yardim": "TSRS 2 md. 10(d) — örn. 3-10 yıl."},
+   {"anahtar": "i_uzun_vade", "grup": "iklim", "etiket": "Uzun vade tanımı ve gerekçesi", "yardim": "TSRS 2 md. 10(d) — örn. 10 yıldan uzun; madencilikte rezerv/ruhsat ömrüyle ilişkilendirilebilir."}
   ]
  },
  {
   "id": "strateji",
   "baslik": "Strateji ve Karar Alma",
-  "referans": "TSRS 2 md. 13-22",
-  "aciklama": "İklim risk ve fırsatlarının iş modeli, değer zinciri, strateji ve finansal durum üzerindeki etkilerini açıklayın.",
+  "referans": "TSRS 1 md. 28-40 (sürdürülebilirlik) • TSRS 2 md. 8-21 (iklim)",
+  "aciklama": "Risk ve fırsatların iş modeli, değer zinciri, strateji ve finansal durum üzerindeki etkileri iki kapsamda ayrı açıklanır: (1) Sürdürülebilirlik (TSRS 1 md. 28-40); (2) İklim (TSRS 2 md. 8-21). Her iki standart benzer başlıkları (iş modeli/değer zinciri, strateji, finansal etkiler) ister; iklim tarafında ek olarak geçiş planı bulunur. Aşağıdaki tabloya her etkiyi kapsamını seçerek girin; anlatılar alt başlıklara ayrılmıştır.",
+  "gruplar": [
+   {"id": "surdurulebilirlik", "baslik": "Sürdürülebilirlik Stratejisi", "referans": "TSRS 1 md. 28-40 — sürdürülebilirlik risk/fırsatlarının strateji ve finansal duruma etkileri"},
+   {"id": "iklim", "baslik": "İklim Stratejisi", "referans": "TSRS 2 md. 13-21 — iklim risk/fırsatlarının strateji, geçiş planı ve finansal duruma etkileri"}
+  ],
   "tablo": {
    "etiket": "İş modeli ve değer zinciri etkileri",
    "sutunlar": [
-    {"anahtar": "alan", "etiket": "İş Modeli / Değer Zinciri Alanı", "tip": "secim", "liste": ["Operasyonlar / Üretim", "Girdiler / Hammaddeler", "Lojistik", "Satış Kanalları", "İnsan Kaynakları", "Finansman", "Diğer"]},
-    {"anahtar": "etki", "etiket": "Etkinin Açıklaması", "tip": "uzun_metin"},
-    {"anahtar": "risk_id", "etiket": "Bağlı Risk/Fırsat ID", "tip": "metin"},
-    {"anahtar": "zaman", "etiket": "Zaman Dilimi", "tip": "secim", "liste": "zaman_dilimi"},
-    {"anahtar": "yon", "etiket": "Etki Yönü", "tip": "secim", "liste": "etki_yonu"}
+    {"anahtar": "kapsam", "etiket": "Kapsam", "tip": "secim", "liste": ["Sürdürülebilirlik (TSRS 1)", "İklim (TSRS 2)"], "yardim": "Bu etki sürdürülebilirlik genel kapsamında mı (TSRS 1 md. 32) yoksa özel iklim kapsamında mı (TSRS 2 md. 13) raporlanıyor?"},
+    {"anahtar": "alan", "etiket": "İş Modeli / Değer Zinciri Alanı", "tip": "secim", "liste": ["Operasyonlar / Üretim", "Girdiler / Hammaddeler", "Lojistik", "Satış Kanalları", "İnsan Kaynakları", "Finansman", "Diğer"], "yardim": "Risk/fırsatın iş modelinin veya değer zincirinin hangi bölümünü etkilediği. Örn. üretim, hammadde tedariki, lojistik."},
+    {"anahtar": "etki", "etiket": "Etkinin Açıklaması", "tip": "uzun_metin", "yardim": "Seçtiğiniz alanın nasıl etkilendiği. Örn. 'Kuraklık nedeniyle su temininde maliyet artışı ve üretim duruş riski.'"},
+    {"anahtar": "risk_id", "etiket": "Bağlı Risk/Fırsat ID", "tip": "metin", "yardim": "Bu etkinin kaynağı olan risk/fırsat kalemi (Risk ve Fırsatlar sayfasındaki ID, örn. R-01). Kalemleri birbirine bağlar."},
+    {"anahtar": "zaman", "etiket": "Zaman Dilimi", "tip": "secim", "liste": "zaman_dilimi", "yardim": "Bu etkinin ne zaman ortaya çıkması bekleniyor: kısa / orta / uzun vade."},
+    {"anahtar": "yon", "etiket": "Etki Yönü", "tip": "secim", "liste": "etki_yonu", "yardim": "İşletme için olumlu (fırsat) mu yoksa olumsuz (tehdit) bir etki mi?"}
    ]
   },
   "anlatilar": [
-   {"anahtar": "strateji_etki", "etiket": "Strateji ve karar almaya etkiler", "yardim": "md. 14 — İklim risk/fırsatlarına yanıt olarak strateji ve kaynak planlamasında yapılan/planlanan değişiklikler."},
-   {"anahtar": "gecis_plani", "etiket": "İklim geçiş planı", "yardim": "md. 14(a)(iv) — Varsa geçiş planının temel varsayımları ve bağımlılıkları."},
-   {"anahtar": "finansal_mevcut", "etiket": "Mevcut finansal etkiler", "yardim": "md. 16 — Raporlama dönemindeki finansal durum, performans ve nakit akışlarına etkiler (nicel/nitel)."},
-   {"anahtar": "finansal_beklenen", "etiket": "Beklenen finansal etkiler", "yardim": "md. 16 — Kısa, orta ve uzun vadede beklenen etkiler."},
-   {"anahtar": "yatirim", "etiket": "İklimle ilgili yatırım ve elden çıkarma planları", "yardim": "md. 14(a)(iii) — Yatırım programları, Ar-Ge, varlık satışları."}
+   {"anahtar": "s_strateji_etki", "grup": "surdurulebilirlik", "etiket": "Strateji ve karar almaya etkiler", "yardim": "TSRS 1 md. 33-34 — Sürdürülebilirlik risk/fırsatlarına yanıt olarak stratejide ve kaynak planlamasında yapılan/planlanan değişiklikler."},
+   {"anahtar": "s_finansal_mevcut", "grup": "surdurulebilirlik", "etiket": "Mevcut finansal etkiler", "yardim": "TSRS 1 md. 35 — Raporlama dönemindeki finansal durum, performans ve nakit akışlarına etkiler (nicel/nitel)."},
+   {"anahtar": "s_finansal_beklenen", "grup": "surdurulebilirlik", "etiket": "Beklenen finansal etkiler", "yardim": "TSRS 1 md. 36-39 — Kısa, orta ve uzun vadede beklenen finansal etkiler."},
+   {"anahtar": "s_yatirim", "grup": "surdurulebilirlik", "etiket": "Yatırım ve kaynak dağılımı planları", "yardim": "TSRS 1 md. 33 — Sürdürülebilirlikle ilgili yatırım programları, Ar-Ge ve kaynak tahsisi."},
+   {"anahtar": "i_strateji_etki", "grup": "iklim", "etiket": "Strateji ve karar almaya etkiler", "yardim": "TSRS 2 md. 14 — İklim risk/fırsatlarına yanıt olarak strateji ve kaynak planlamasında yapılan/planlanan değişiklikler."},
+   {"anahtar": "i_gecis_plani", "grup": "iklim", "etiket": "İklim geçiş planı", "yardim": "TSRS 2 md. 14(a)(iv) — Varsa geçiş planının temel varsayımları, bağımlılıkları ve hedefleri (düşük karbon ekonomisine geçiş)."},
+   {"anahtar": "i_finansal_mevcut", "grup": "iklim", "etiket": "Mevcut finansal etkiler", "yardim": "TSRS 2 md. 16 — Raporlama dönemindeki finansal durum, performans ve nakit akışlarına iklim etkileri (nicel/nitel)."},
+   {"anahtar": "i_finansal_beklenen", "grup": "iklim", "etiket": "Beklenen finansal etkiler", "yardim": "TSRS 2 md. 17-21 — Kısa, orta ve uzun vadede beklenen iklim kaynaklı finansal etkiler."},
+   {"anahtar": "i_yatirim", "grup": "iklim", "etiket": "İklimle ilgili yatırım ve elden çıkarma planları", "yardim": "TSRS 2 md. 14(a)(iii) — İklim yatırım programları, Ar-Ge, varlık satışları ve dağılımı."}
   ]
  },
  {
   "id": "direnclilik",
-  "baslik": "İklim Dirençliliği ve Senaryo Analizi",
-  "referans": "TSRS 2 md. 22 • md. B1-B18",
-  "aciklama": "Senaryo analizi kullanarak stratejinin iklim değişikliğine karşı dirençliliğini değerlendirin.",
+  "baslik": "Dirençlilik ve Senaryo Analizi",
+  "referans": "TSRS 1 md. 41-42 (sürdürülebilirlik) • TSRS 2 md. 22, B1-B18 (iklim)",
+  "aciklama": "Stratejinin dirençliliği iki kapsamda değerlendirilir ve aralarında önemli bir fark vardır: (1) Sürdürülebilirlik dirençliliği (TSRS 1 md. 41-42) genellikle niteliksel bir değerlendirmedir; (2) İklim dirençliliği (TSRS 2 md. 22, B1-B18) iklimle ilgili senaryo analizi kullanılarak yapılır ve daha ayrıntılıdır. Aşağıdaki senaryo tablosu ağırlıklı olarak iklim değerlendirmesi içindir; her iki kapsamın anlatıları alt başlıklara ayrılmıştır.",
+  "gruplar": [
+   {"id": "surdurulebilirlik", "baslik": "Sürdürülebilirlik Dirençliliği", "referans": "TSRS 1 md. 41-42 — stratejinin sürdürülebilirlik risklerine karşı dirençliliği (niteliksel değerlendirme)"},
+   {"id": "iklim", "baslik": "İklim Dirençliliği (Senaryo Analizi)", "referans": "TSRS 2 md. 22, B1-B18 — iklim senaryo analizi ile dirençlilik değerlendirmesi"}
+  ],
   "tablo": {
-   "etiket": "Kullanılan senaryolar",
+   "etiket": "Kullanılan iklim senaryoları (TSRS 2 md. 22)",
    "sutunlar": [
-    {"anahtar": "senaryo", "etiket": "Senaryo", "tip": "secim", "liste": "senaryo"},
-    {"anahtar": "paris", "etiket": "Paris Uyumlu mu?", "tip": "secim", "liste": "evet_hayir"},
-    {"anahtar": "sicaklik", "etiket": "Sıcaklık Varsayımı", "tip": "metin"},
-    {"anahtar": "ufuk", "etiket": "Zaman Ufku", "tip": "metin"},
-    {"anahtar": "varsayim", "etiket": "Temel Varsayımlar", "tip": "uzun_metin"},
-    {"anahtar": "tutar", "etiket": "Niceliksel Etki (Bin TL)", "tip": "sayi"},
-    {"anahtar": "sonuc", "etiket": "Sonuçlar", "tip": "uzun_metin"}
+    {"anahtar": "senaryo", "etiket": "Senaryo", "tip": "secim", "liste": "senaryo", "yardim": "Dirençlilik testinde kullanılan iklim senaryosu (örn. NGFS, IEA, IPCC SSP). Genellikle en az bir düşük-emisyon (Paris uyumlu) senaryo gerekir."},
+    {"anahtar": "paris", "etiket": "Paris Uyumlu mu?", "tip": "secim", "liste": "evet_hayir", "yardim": "Bu senaryo küresel ısınmayı 1,5-2°C ile sınırlayan Paris Anlaşması hedefiyle uyumlu mu? TSRS 2, iklimle bağdaşık bir senaryonun kullanılmasını ister."},
+    {"anahtar": "sicaklik", "etiket": "Sıcaklık Varsayımı", "tip": "metin", "yardim": "Senaryonun öngördüğü küresel sıcaklık artışı (örn. '1,5°C', '2°C', '4°C')."},
+    {"anahtar": "ufuk", "etiket": "Zaman Ufku", "tip": "metin", "yardim": "Analizin kapsadığı dönem (örn. '2030', '2050'). Madencilikte rezerv/ruhsat ömrüyle ilişkilendirilebilir."},
+    {"anahtar": "varsayim", "etiket": "Temel Varsayımlar", "tip": "uzun_metin", "yardim": "Senaryoda kullanılan ana varsayımlar (karbon fiyatı, talep değişimi, teknoloji, düzenleme)."},
+    {"anahtar": "tutar", "etiket": "Niceliksel Etki (Bin TL)", "tip": "sayi", "yardim": "Tahmin edilebiliyorsa bu senaryonun işletmeye finansal etkisi (bin TL). Zorunlu değil."},
+    {"anahtar": "sonuc", "etiket": "Sonuçlar", "tip": "uzun_metin", "yardim": "Bu senaryo altında stratejinin nasıl performans gösterdiği; tespit edilen kırılganlıklar ve uyum kapasitesi."}
    ]
   },
   "anlatilar": [
-   {"anahtar": "yaklasim", "etiket": "Analitik yaklaşımın seçimi", "yardim": "md. B2-B7 — Nitel mi nicel mi; kapsam ve yöntem seçiminin gerekçesi (maliyet/yetenek dengesi)."},
-   {"anahtar": "degerlendirme", "etiket": "Dirençlilik değerlendirmesinin sonucu", "yardim": "md. 22(a) — Stratejinin senaryolardaki performansı; uyum kapasitesi."},
-   {"anahtar": "belirsizlik", "etiket": "Önemli belirsizlik alanları", "yardim": "md. 22(a)(ii) — Analizde dikkate alınan önemli belirsizlikler."},
-   {"anahtar": "tarih", "etiket": "Son değerlendirme tarihi ve sıklığı", "yardim": "md. B18 — Analizin yapıldığı tarih ve güncelleme sıklığı."}
+   {"anahtar": "s_yaklasim", "grup": "surdurulebilirlik", "etiket": "Sürdürülebilirlik dirençlilik değerlendirmesi", "yardim": "TSRS 1 md. 41 — İşletmenin stratejisi ve iş modelinin sürdürülebilirlikle ilgili risklere karşı dirençliliğine ilişkin niteliksel değerlendirme."},
+   {"anahtar": "s_uyum", "grup": "surdurulebilirlik", "etiket": "Uyum kapasitesi ve esneklik", "yardim": "TSRS 1 md. 42 — İşletmenin değişen koşullara uyum sağlama (strateji/iş modelini ayarlama) kapasitesi."},
+   {"anahtar": "i_yaklasim", "grup": "iklim", "etiket": "Analitik yaklaşımın seçimi", "yardim": "TSRS 2 md. B2-B7 — Nitel mi nicel mi; senaryo analizinin kapsam ve yönteminin gerekçesi (işletmenin koşullarına göre maliyet/yetenek dengesi)."},
+   {"anahtar": "i_degerlendirme", "grup": "iklim", "etiket": "Dirençlilik değerlendirmesinin sonucu", "yardim": "TSRS 2 md. 22(a) — Stratejinin senaryolardaki performansı; iklim değişikliğine uyum kapasitesi ve tespit edilen kırılganlıklar."},
+   {"anahtar": "i_belirsizlik", "grup": "iklim", "etiket": "Önemli belirsizlik alanları", "yardim": "TSRS 2 md. 22(a)(ii) — Senaryo analizinde dikkate alınan önemli belirsizlikler ve sınırlamalar."},
+   {"anahtar": "i_tarih", "grup": "iklim", "etiket": "Son değerlendirme tarihi ve sıklığı", "yardim": "TSRS 2 md. B18 — Senaryo analizinin yapıldığı tarih ve güncelleme sıklığı."}
   ]
  },
  {

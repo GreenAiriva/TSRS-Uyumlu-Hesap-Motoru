@@ -375,7 +375,7 @@ window.Motor = (function () {
     }
     return [
       { direk: "Yönetişim", ref: "TSRS 1 md. 26-27 • TSRS 2 md. 5-7", durum: durum(["yonetisim"]), kaynak: "Yönetişim Açıklamaları" },
-      { direk: "Strateji", ref: "TSRS 2 md. 13-22", durum: durum(["strateji", "direnclilik", "risk_firsat"]), kaynak: "Strateji • Dirençlilik • Risk ve Fırsatlar" },
+      { direk: "Strateji", ref: "TSRS 1 md. 28-40 • TSRS 2 md. 8-21", durum: durum(["strateji", "direnclilik", "risk_firsat"]), kaynak: "Strateji • Dirençlilik • Risk ve Fırsatlar" },
       { direk: "Risk Yönetimi", ref: "TSRS 1 md. 43-44 • TSRS 2 md. 24-26", durum: durum(["risk_yonetimi"]), kaynak: "Risk Yönetimi Süreci" },
       { direk: "Metrikler ve Hedefler", ref: "TSRS 2 md. 29-37", durum: durum(["metrikler", "hedefler"]), kaynak: "Sektörler Arası Metrikler • İklim Hedefleri" }
     ];

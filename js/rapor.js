@@ -259,7 +259,7 @@ window.Rapor = (function () {
 
     anlatBolumu("yonetisim", "Yönetişim");
     anlatBolumu("strateji", "Strateji");
-    anlatBolumu("risk_firsat", "İklim Risk ve Fırsatları");
+    anlatBolumu("risk_firsat", "Risk ve Fırsatlar");
     /* Risk kayıt özeti tablosu */
     var riskler = mod("risk_firsat").kayitlar || [];
     if (riskler.length) {
@@ -271,7 +271,7 @@ window.Rapor = (function () {
         }))
       ]));
     }
-    anlatBolumu("direnclilik", "İklim Dirençliliği (Senaryo Analizi)");
+    anlatBolumu("direnclilik", "Dirençlilik ve Senaryo Analizi");
     anlatBolumu("risk_yonetimi", "Risk Yönetimi");
     anlatBolumu("hedefler", "Metrikler ve Hedefler");
     /* Hedef özet tablosu */
