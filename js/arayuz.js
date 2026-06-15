@@ -112,10 +112,10 @@ window.UI = (function () {
     }
     if (t.degisti) girdi.addEventListener("change", t.degisti);
     var sarici = el("div", { class: "alan" + ((t.genis || t.tip === "uzun_metin") ? " genis" : "") }, [
-      el("label", { for: lid }, [t.etiket, t.zorunlu ? el("span", { class: "zorunlu" }, ["*"]) : null]),
+      el("label", { for: lid }, [t.etiket, t.zorunlu ? el("span", { class: "zorunlu" }, ["*"]) : null,
+        t.yardim ? UI.yardimIkon(t.yardim) : null]),
       girdi,
-      girdi.parentListe || null,
-      t.yardim ? el("span", { class: "yardim" }, [t.yardim]) : null
+      girdi.parentListe || null
     ]);
     sarici.girdi = girdi;
     return sarici;
@@ -270,6 +270,17 @@ window.UI = (function () {
     kok.appendChild(kenar); kok.appendChild(icerik);
     window.addEventListener("hashchange", UI.ciz);
     UI.ciz();
+  };
+
+  /* Yardım/kılavuz soru işareti: üzerine gelince TSRS madde dayanağı + açıklama tooltip'i.
+     metin içinde **kalın** vurgu desteklenir (madde no'ları için). */
+  UI.yardimIkon = function (metin) {
+    if (!metin) return null;
+    var tip = el("span", { class: "yardim-tip" });
+    // **...** kısmını <b>...</b> yap (madde no vurgusu)
+    tip.innerHTML = UI.kacir(metin).replace(/\*\*(.+?)\*\*/g, "<b>$1</b>");
+    return el("span", { class: "yardim-ikon", tabindex: "0", role: "button",
+      "aria-label": "Açıklama: " + metin, title: metin }, ["?", tip]);
   };
 
   /* Kart yardımcıları */
@@ -960,6 +971,18 @@ window.UI = (function () {
             var k = Motor.kategoriKapsami(s.kategori);
             return el("span", { class: "rozet k" + k }, ["K" + k]);
           } },
+          { etiket: "CO2 (kg)", sinif: "sayi", deger: function (s) {
+            var h = Motor.hesapFaaliyet(s);
+            return h.hata ? "—" : Motor.fmt(h.co2kg, 2);
+          } },
+          { etiket: "CH4 (kg)", sinif: "sayi", deger: function (s) {
+            var h = Motor.hesapFaaliyet(s);
+            return h.hata ? "—" : Motor.fmt(h.ch4kg, 4);
+          } },
+          { etiket: "N2O (kg)", sinif: "sayi", deger: function (s) {
+            var h = Motor.hesapFaaliyet(s);
+            return h.hata ? "—" : Motor.fmt(h.n2okg, 4);
+          } },
           { etiket: "tCO2e", sinif: "sayi", deger: function (s) {
             var h = Motor.hesapFaaliyet(s);
             return h.hata ? el("span", { class: "rozet uyari", title: h.hata }, ["!"]) : el("b", null, [Motor.fmt(h.tco2e, 3)]);
@@ -1274,9 +1297,8 @@ window.UI = (function () {
         });
         t.addEventListener("change", function () { UI.bildir("Kaydedildi"); UI.navGuncelle(); });
         return el("div", { class: "alan" }, [
-          el("label", null, [a.etiket]),
-          t,
-          a.yardim ? el("span", { class: "yardim" }, [a.yardim]) : null
+          el("label", null, [a.etiket, a.yardim ? UI.yardimIkon(a.yardim) : null]),
+          t
         ]);
       };
 

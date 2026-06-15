@@ -14,8 +14,8 @@ VERI.ef_elektrik = [
   "Region": "UK",
   "Year": 2023,
   "CO2_EF_kg_per_kWh": 0.20496,
-  "CH4_EF_kg_per_kWh": 3.2e-05,
-  "N2O_EF_kg_per_kWh": 4.5973e-06,
+  "CH4_EF_kg_per_kWh": 0.000032,
+  "N2O_EF_kg_per_kWh": 0.000005,
   "EF_Unit": "kg/kWh"
  },
  {

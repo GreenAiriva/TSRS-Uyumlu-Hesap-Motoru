@@ -597,5 +597,113 @@ VERI.ef_tasimacilik = [
   "CH4_Unit": "g/tonne-kilometer",
   "N2O_EF": 0.0169765101,
   "N2O_Unit": "g/tonne-kilometer"
+ },
+ {
+  "Type": "US Freight (Ağırlık-Mesafe)",
+  "Vehicle_Class": "Medium-Duty Truck",
+  "Weight_Class": null,
+  "Fuel": null,
+  "CO2_EF": 0.168,
+  "CO2_Unit": "kg/short ton-mile",
+  "CH4_EF": 0.0015,
+  "CH4_Unit": "g/short ton-mile",
+  "N2O_EF": 0.0047,
+  "N2O_Unit": "g/short ton-mile"
+ },
+ {
+  "Type": "US Freight (Ağırlık-Mesafe)",
+  "Vehicle_Class": "Heavy-Duty Truck",
+  "Weight_Class": null,
+  "Fuel": null,
+  "CO2_EF": 0.168,
+  "CO2_Unit": "kg/short ton-mile",
+  "CH4_EF": 0.0015,
+  "CH4_Unit": "g/short ton-mile",
+  "N2O_EF": 0.0047,
+  "N2O_Unit": "g/short ton-mile"
+ },
+ {
+  "Type": "US Freight (Ağırlık-Mesafe)",
+  "Vehicle_Class": "Rail",
+  "Weight_Class": null,
+  "Fuel": null,
+  "CO2_EF": 0.022,
+  "CO2_Unit": "kg/short ton-mile",
+  "CH4_EF": 0.0017,
+  "CH4_Unit": "g/short ton-mile",
+  "N2O_EF": 0.0005,
+  "N2O_Unit": "g/short ton-mile"
+ },
+ {
+  "Type": "US Freight (Ağırlık-Mesafe)",
+  "Vehicle_Class": "Waterborne Craft",
+  "Weight_Class": null,
+  "Fuel": null,
+  "CO2_EF": 0.082,
+  "CO2_Unit": "kg/short ton-mile",
+  "CH4_EF": 0.0326,
+  "CH4_Unit": "g/short ton-mile",
+  "N2O_EF": 0.0021,
+  "N2O_Unit": "g/short ton-mile"
+ },
+ {
+  "Type": "US Freight (Ağırlık-Mesafe)",
+  "Vehicle_Class": "Aircraft",
+  "Weight_Class": null,
+  "Fuel": null,
+  "CO2_EF": 0.905,
+  "CO2_Unit": "kg/short ton-mile",
+  "CH4_EF": 0,
+  "CH4_Unit": "g/short ton-mile",
+  "N2O_EF": 0.0279,
+  "N2O_Unit": "g/short ton-mile"
+ },
+ {
+  "Type": "US Freight (Araç-Mesafe)",
+  "Vehicle_Class": "Medium-Duty Truck",
+  "Weight_Class": null,
+  "Fuel": null,
+  "CO2_EF": 1.247,
+  "CO2_Unit": "kg/vehicle-mile",
+  "CH4_EF": 0.011,
+  "CH4_Unit": "g/vehicle-mile",
+  "N2O_EF": 0.035,
+  "N2O_Unit": "g/vehicle-mile"
+ },
+ {
+  "Type": "US Freight (Araç-Mesafe)",
+  "Vehicle_Class": "Heavy-Duty Truck",
+  "Weight_Class": null,
+  "Fuel": null,
+  "CO2_EF": 1.247,
+  "CO2_Unit": "kg/vehicle-mile",
+  "CH4_EF": 0.011,
+  "CH4_Unit": "g/vehicle-mile",
+  "N2O_EF": 0.035,
+  "N2O_Unit": "g/vehicle-mile"
+ },
+ {
+  "Type": "US Freight (Araç-Mesafe)",
+  "Vehicle_Class": "Passenger Car",
+  "Weight_Class": null,
+  "Fuel": null,
+  "CO2_EF": 0.175,
+  "CO2_Unit": "kg/vehicle-mile",
+  "CH4_EF": 0.005,
+  "CH4_Unit": "g/vehicle-mile",
+  "N2O_EF": 0.003,
+  "N2O_Unit": "g/vehicle-mile"
+ },
+ {
+  "Type": "US Freight (Araç-Mesafe)",
+  "Vehicle_Class": "Light-Duty Truck",
+  "Weight_Class": null,
+  "Fuel": null,
+  "CO2_EF": 0.955,
+  "CO2_Unit": "kg/vehicle-mile",
+  "CH4_EF": 0.026,
+  "CH4_Unit": "g/vehicle-mile",
+  "N2O_EF": 0.023,
+  "N2O_Unit": "g/vehicle-mile"
  }
 ];

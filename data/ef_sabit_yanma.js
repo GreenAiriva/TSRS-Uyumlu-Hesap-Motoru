@@ -47,27 +47,15 @@ VERI.ef_sabit_yanma = [
   "Liquid_Density_kg_per_L": null
  },
  {
-  "Fuel_Name": "Motor gasoline/Petrol2",
-  "Category": "Oil products",
-  "NCV_TJ_per_Gg": 44.3,
-  "CO2_kg_per_TJ": null,
-  "CH4_kg_per_TJ": 10,
-  "N2O_kg_per_TJ": 0.6,
-  "CO2_kg_per_tonne": null,
-  "CH4_kg_per_tonne": 0.443,
-  "N2O_kg_per_tonne": 0.02658,
-  "Liquid_Density_kg_per_L": 0.745342576
- },
- {
-  "Fuel_Name": "Motor gasoline2",
+  "Fuel_Name": "Motor gasoline/Petrol",
   "Category": "Oil products",
   "NCV_TJ_per_Gg": 44.3,
   "CO2_kg_per_TJ": 69300,
-  "CH4_kg_per_TJ": null,
-  "N2O_kg_per_TJ": null,
+  "CH4_kg_per_TJ": 10,
+  "N2O_kg_per_TJ": 0.6,
   "CO2_kg_per_tonne": 3069.99,
-  "CH4_kg_per_tonne": null,
-  "N2O_kg_per_tonne": null,
+  "CH4_kg_per_tonne": 0.443,
+  "N2O_kg_per_tonne": 0.02658,
   "Liquid_Density_kg_per_L": 0.745342576
  },
  {
@@ -644,6 +632,30 @@ VERI.ef_sabit_yanma = [
   "CO2_kg_per_tonne": 2751.84,
   "CH4_kg_per_tonne": 0.252,
   "N2O_kg_per_tonne": 0.00504,
+  "Liquid_Density_kg_per_L": null
+ },
+ {
+  "Fuel_Name": "Municipal wastes (Biomass fraction)",
+  "Category": "Biomass",
+  "NCV_TJ_per_Gg": 11.6,
+  "CO2_kg_per_TJ": 100000,
+  "CH4_kg_per_TJ": 300,
+  "N2O_kg_per_TJ": 4,
+  "CO2_kg_per_tonne": 1160,
+  "CH4_kg_per_tonne": 3.48,
+  "N2O_kg_per_tonne": 0.0464,
+  "Liquid_Density_kg_per_L": null
+ },
+ {
+  "Fuel_Name": "Peat",
+  "Category": "Biomass",
+  "NCV_TJ_per_Gg": 9.76,
+  "CO2_kg_per_TJ": 106000,
+  "CH4_kg_per_TJ": 10,
+  "N2O_kg_per_TJ": 1.4,
+  "CO2_kg_per_tonne": 1034.56,
+  "CH4_kg_per_tonne": 0.0976,
+  "N2O_kg_per_tonne": 0.013664,
   "Liquid_Density_kg_per_L": null
  }
 ];

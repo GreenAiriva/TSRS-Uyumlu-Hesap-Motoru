@@ -116,6 +116,22 @@ table.veri .co2e{font-weight:600;color:var(--antrasit)}
 .alan input[readonly]{background:var(--yuzey-2);font-style:italic;color:var(--soluk)}
 .alan .hata-not{font-size:11px;color:var(--oksit)}
 
+/* ---- Yardım / Kılavuz soru işareti ve tooltip ---- */
+.yardim-ikon{display:inline-flex;align-items:center;justify-content:center;width:15px;height:15px;
+  border-radius:50%;background:var(--soluk);color:#fff;font-size:10px;font-weight:700;line-height:1;
+  cursor:help;flex:none;position:relative;vertical-align:middle;-webkit-user-select:none;user-select:none}
+.yardim-ikon:hover,.yardim-ikon:focus{background:var(--bakir);outline:none}
+.yardim-ikon .yardim-tip{display:none;position:absolute;left:0;top:135%;
+  width:min(340px,78vw);background:#23262A;color:#EEF0F2;font-size:11.5px;font-weight:400;
+  line-height:1.55;letter-spacing:.1px;padding:10px 12px;border-radius:8px;
+  box-shadow:0 8px 28px rgba(0,0,0,.30);z-index:60;text-align:left;white-space:normal;cursor:default}
+.yardim-ikon .yardim-tip::before{content:"";position:absolute;left:5px;top:-5px;
+  border-left:6px solid transparent;border-right:6px solid transparent;border-bottom:6px solid #23262A}
+.yardim-ikon .yardim-tip b{color:#fff;font-weight:700}
+.yardim-ikon:hover .yardim-tip,.yardim-ikon:focus .yardim-tip{display:block}
+/* Tooltip'in kart kenarından taşmaması için kartlarda taşma görünür kalsın */
+.kart-ic{overflow:visible}
+
 /* ---- Düğmeler ---- */
 .btn{display:inline-flex;align-items:center;gap:7px;font:inherit;font-size:13px;font-weight:600;padding:8px 14px;
   border:1px solid transparent;border-radius:var(--radius);cursor:pointer;background:var(--antrasit);color:#fff;white-space:nowrap}
