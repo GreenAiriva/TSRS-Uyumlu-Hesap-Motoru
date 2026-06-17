@@ -270,7 +270,63 @@ window.UI = (function () {
     kok.appendChild(kenar); kok.appendChild(icerik);
     window.addEventListener("hashchange", UI.ciz);
     UI.ciz();
+    yedekKorumasiniKur();      // çıkış uyarısı + açılış hatırlatması
   };
+
+  /* ============================================================
+     YEDEK KORUMASI (revizyon: veri kaybı önleme)
+     1) Çıkış uyarısı: yedeklenmemiş değişiklik varken sekme/pencere kapatılırsa
+        tarayıcı "ayrılmak istediğinizden emin misiniz?" sorar.
+     2) Açılış hatırlatması: son yedekten bu yana 7+ gün geçtiyse veya hiç
+        yedek alınmamış ama veri varsa, nazik bir hatırlatma kartı gösterilir.
+     ============================================================ */
+  function yedekKorumasiniKur() {
+    // 1) Çıkış uyarısı — yalnızca yedeklenmemiş değişiklik varsa devreye girer
+    window.addEventListener("beforeunload", function (e) {
+      if (window.Depo && Depo.yedeklenmemisDegisiklikVar && Depo.yedeklenmemisDegisiklikVar()) {
+        e.preventDefault();
+        e.returnValue = "";   // tarayıcılar standart "ayrılmak üzeresiniz" uyarısını gösterir
+        return "";
+      }
+    });
+
+    // 2) Açılış hatırlatması — sayfa kurulduktan kısa süre sonra (bir kez)
+    setTimeout(function () {
+      try { yedekHatirlatmasiniGoster(); } catch (e) {}
+    }, 1200);
+  }
+
+  function yedekHatirlatmasiniGoster() {
+    if (!window.Depo) return;
+    // Bu oturumda zaten gösterildiyse tekrar etme
+    if (sessionStorage.getItem("KM3_HATIRLATMA_GOSTERILDI")) return;
+
+    var gun = Depo.sonYedektenBuyanaGun();          // null = hiç yedek yok
+    var degisiklikVar = Depo.sonDegisimZamani();    // null = hiç veri girilmemiş
+    var mesaj = null;
+
+    if (gun == null && degisiklikVar) {
+      mesaj = "Henüz hiç yedek almadınız. Verileriniz yalnızca bu tarayıcıda saklanıyor; " +
+              "tarayıcı verisi silinirse kaybolur. Düzenli JSON yedeği almanızı öneririz.";
+    } else if (gun != null && gun >= 7 && Depo.yedeklenmemisDegisiklikVar()) {
+      var g = Math.floor(gun);
+      mesaj = "Son yedeğinizin üzerinden " + g + " gün geçti ve o tarihten sonra değişiklik yaptınız. " +
+              "Güncel bir JSON yedeği almanızı öneririz.";
+    }
+    if (!mesaj) return;
+
+    sessionStorage.setItem("KM3_HATIRLATMA_GOSTERILDI", "1");
+    UI.modal("Yedek Hatırlatması", el("div", null, [
+      el("p", { style: "margin:0 0 10px;line-height:1.6" }, [mesaj]),
+      el("p", { style: "margin:0;font-size:12.5px;color:var(--soluk)" },
+        ["Yedek dosyası, başka bir bilgisayara taşınabilen gerçek arşiv kopyanızdır."])
+    ]), [
+      { etiket: "Daha sonra" },
+      { etiket: "⬇ Şimdi Yedek Al", sinif: "birincil", tik: function (kapat) {
+        Depo.yedekAl(); UI.bildir("Yedek dosyası indiriliyor"); kapat();
+      } }
+    ], 480);
+  }
 
   /* Yardım/kılavuz soru işareti: üzerine gelince TSRS madde dayanağı + açıklama tooltip'i.
      metin içinde **kalın** vurgu desteklenir (madde no'ları için). */

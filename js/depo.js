@@ -9,6 +9,8 @@
 window.Depo = (function () {
   var ANAHTAR_VERI = "KM3_VERI";
   var ANAHTAR_REF  = "KM3_REF";
+  var ANAHTAR_YEDEK_ZAMAN  = "KM3_SON_YEDEK";      // en son yedek alınan an (ISO)
+  var ANAHTAR_DEGISIM_ZAMAN = "KM3_SON_DEGISIM";   // en son veri değişikliği anı (ISO)
 
   var bosVeri = function () {
     return {
@@ -64,11 +66,39 @@ window.Depo = (function () {
         localStorage.setItem(ANAHTAR_REF, JSON.stringify({
           ref: d.refOzel, ayar: d.ayarOzel, liste: d.listeOzel, modulTanim: d.modulTanimOzel
         }));
+        // Yedeklenmemiş değişiklik takibi: her gerçek kayıtta değişim anını güncelle
+        try { localStorage.setItem(ANAHTAR_DEGISIM_ZAMAN, new Date().toISOString()); } catch (e2) {}
         if (!sessiz && window.UI) UI.bildir("Kaydedildi");
       } catch (e) {
         if (window.UI) UI.bildir("Kaydetme hatası: tarayıcı depolaması kullanılamıyor", true);
       }
     }, 250);
+  };
+
+  /* ---- Yedeklenmemiş değişiklik takibi (otomatik hatırlatma + çıkış uyarısı için) ----
+     sonDegisim > sonYedek  ⇒  yedeklenmemiş değişiklik var. */
+  d.sonYedekZamani = function () {
+    try { return localStorage.getItem(ANAHTAR_YEDEK_ZAMAN) || null; } catch (e) { return null; }
+  };
+  d.sonDegisimZamani = function () {
+    try { return localStorage.getItem(ANAHTAR_DEGISIM_ZAMAN) || null; } catch (e) { return null; }
+  };
+  d.yedekZamaniniIsaretle = function () {
+    try { localStorage.setItem(ANAHTAR_YEDEK_ZAMAN, new Date().toISOString()); } catch (e) {}
+  };
+  // Son yedekten bu yana kaydedilmiş (yedeklenmemiş) değişiklik var mı?
+  d.yedeklenmemisDegisiklikVar = function () {
+    var sd = d.sonDegisimZamani();
+    if (!sd) return false;                 // hiç değişiklik yoksa uyarma
+    var sy = d.sonYedekZamani();
+    if (!sy) return true;                  // hiç yedek alınmamışsa ve değişiklik varsa: evet
+    return new Date(sd).getTime() > new Date(sy).getTime();
+  };
+  // Son yedekten bu yana geçen gün sayısı (yedek hiç yoksa null)
+  d.sonYedektenBuyanaGun = function () {
+    var sy = d.sonYedekZamani();
+    if (!sy) return null;
+    return (Date.now() - new Date(sy).getTime()) / 86400000;
   };
 
   /* ---- Veri setleri (referans tabloları) ---- */
@@ -239,14 +269,22 @@ window.Depo = (function () {
   };
 
   /* ---- Yedekleme ---- */
+  // Dosya adı için tarih-saat damgası: 2026-06-15_14-30 (aynı gün üzerine yazmayı önler)
+  function zamanDamgasi() {
+    var t = new Date();
+    function ik(n) { return String(n).padStart(2, "0"); }
+    return t.getFullYear() + "-" + ik(t.getMonth() + 1) + "-" + ik(t.getDate()) +
+           "_" + ik(t.getHours()) + "-" + ik(t.getMinutes());
+  }
   d.yedekAl = function () {
     var paket = {
       tur: "KarbonMotoru_Yedek", surum: 3, tarih: new Date().toISOString(),
       veri: d.veri,
       ref: d.refOzel, ayar: d.ayarOzel, liste: d.listeOzel, modulTanim: d.modulTanimOzel
     };
-    d.dosyaIndir("karbon-motoru-yedek-" + new Date().toISOString().slice(0, 10) + ".json",
+    d.dosyaIndir("karbon-motoru-yedek-" + zamanDamgasi() + ".json",
       JSON.stringify(paket, null, 1), "application/json");
+    d.yedekZamaniniIsaretle();   // yedek alındı: hatırlatma/çıkış uyarısı sıfırlanır
   };
   d.yedekYukle = function (metin) {
     var p = guvenliParse(metin, null);
@@ -261,6 +299,10 @@ window.Depo = (function () {
     if (neler === "girdiler" || neler === "hepsi") d.veri = bosVeri();
     if (neler === "referans" || neler === "hepsi") {
       d.refOzel = {}; d.ayarOzel = {}; d.listeOzel = {}; d.modulTanimOzel = null;
+    }
+    if (neler === "hepsi") {
+      // Yedek/değişim zaman damgalarını da temizle (yanlış çıkış uyarısı çıkmasın)
+      try { localStorage.removeItem(ANAHTAR_YEDEK_ZAMAN); localStorage.removeItem(ANAHTAR_DEGISIM_ZAMAN); } catch (e) {}
     }
     d.kaydet(true);
   };
