@@ -542,5 +542,55 @@ window.Depo = (function () {
     return sonuc;
   };
 
+  /* ---- FAALİYET DÖKÜMÜ DIŞA AKTARMA (CSV / XLSX) ----
+     Tüm faaliyet/soğutucu/elektrik kayıtları kapsam'a göre sınıflandırılmış,
+     detaylı kolonlarla. Motor.faaliyetDokumu() veriyi üretir. */
+  function dosyaSlug(s) {
+    return String(s || "sirket").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "sirket";
+  }
+  function dokumDosyaAdi(uzanti) {
+    var p = d.veri.profil || {};
+    return "faaliyet-dokumu-" + dosyaSlug(p.unvan) + (p.yil ? "-" + p.yil : "") + "." + uzanti;
+  }
+  d.faaliyetCsvIndir = function () {
+    if (!window.Motor || !Motor.faaliyetDokumu) return;
+    var dk = Motor.faaliyetDokumu(), sep = ";";
+    function hucre(v) {
+      if (v == null) v = "";
+      else if (typeof v === "number") v = isFinite(v) ? String(v).replace(".", ",") : "";  // TR ondalık, gruplama yok
+      v = String(v);
+      if (v.indexOf(sep) > -1 || v.indexOf('"') > -1 || v.indexOf("\n") > -1) v = '"' + v.replace(/"/g, '""') + '"';
+      return v;
+    }
+    var satir = function (hucreler) { return hucreler.join(sep); };
+    var baslik = satir(dk.kolonlar.map(function (k) { return hucre(k.etiket); }));
+    var govde = dk.satirlar.map(function (r) { return satir(dk.kolonlar.map(function (k) { return hucre(r[k.anahtar]); })); });
+    var icerik = "﻿" + [baslik].concat(govde).join("\r\n");   // UTF-8 BOM (Excel'de Türkçe doğru)
+    d.dosyaIndir(dokumDosyaAdi("csv"), icerik, "text/csv");
+  };
+  d.faaliyetXlsxIndir = function () {
+    if (!window.Motor || !Motor.faaliyetDokumu) return;
+    function uret() {
+      if (!window.XLSX) { if (window.UI) UI.bildir("XLSX kütüphanesi yok; CSV indiriliyor", true); d.faaliyetCsvIndir(); return; }
+      var dk = Motor.faaliyetDokumu();
+      var aoa = [dk.kolonlar.map(function (k) { return k.etiket; })];
+      dk.satirlar.forEach(function (r) {
+        aoa.push(dk.kolonlar.map(function (k) { var x = r[k.anahtar]; return (typeof x === "number" && !isFinite(x)) ? "" : x; }));
+      });
+      var ws = XLSX.utils.aoa_to_sheet(aoa);
+      ws["!cols"] = dk.kolonlar.map(function (k) { return { wch: Math.max(10, k.etiket.length + 2) }; });
+      var wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Faaliyet Dökümü");
+      XLSX.writeFile(wb, dokumDosyaAdi("xlsx"));
+    }
+    if (window.XLSX) { uret(); return; }
+    if (window.UI) UI.bildir("XLSX hazırlanıyor…");
+    var sc = document.createElement("script");
+    sc.src = "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js";
+    sc.onload = uret;
+    sc.onerror = function () { if (window.UI) UI.bildir("XLSX yüklenemedi (çevrimdışı olabilir); CSV indiriliyor", true); d.faaliyetCsvIndir(); };
+    document.head.appendChild(sc);
+  };
+
   return d;
 })();

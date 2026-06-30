@@ -82,6 +82,12 @@ window.Rapor = (function () {
     UI.ustAksiyon(el("button", { class: "btn ikincil yazdirma-gizle", type: "button",
       onclick: function () { Motor.hesapDefteriIndir(); UI.bildir("Hesap defteri (JSON) indiriliyor"); } },
       ["⬇ Hesap Defteri (JSON)"]));
+    UI.ustAksiyon(el("button", { class: "btn ikincil yazdirma-gizle", type: "button",
+      onclick: function () { Depo.faaliyetXlsxIndir(); } },
+      ["⬇ Faaliyet Dökümü (XLSX)"]));
+    UI.ustAksiyon(el("button", { class: "btn ikincil yazdirma-gizle", type: "button",
+      onclick: function () { Depo.faaliyetCsvIndir(); UI.bildir("Faaliyet dökümü (CSV) indiriliyor"); } },
+      ["⬇ CSV"]));
 
     if (T.hatalar.length) {
       kok.appendChild(el("div", { class: "bilgi yazdirma-gizle", style: "border-left-color:var(--oksit)" },

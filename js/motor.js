@@ -780,5 +780,69 @@ window.Motor = (function () {
     };
   };
 
+  /* ============================================================
+     FAALİYET DÖKÜMÜ — tüm faaliyet/soğutucu/elektrik kayıtlarını
+     kapsam'a göre sınıflandırıp tek, detaylı tabloya toplar.
+     CSV/XLSX dışa aktarımının veri kaynağıdır (depo.js export'ları kullanır).
+     Dönen: { kolonlar:[{anahtar,etiket}], satirlar:[{...}] } — ham değerler.
+     ============================================================ */
+  M.faaliyetDokumu = function () {
+    var v = Depo.veri;
+    var kolonlar = [
+      { anahtar: "no", etiket: "Kayıt No" },
+      { anahtar: "kapsam", etiket: "Kapsam" },
+      { anahtar: "tip", etiket: "Veri Tipi" },
+      { anahtar: "ad", etiket: "Tesis / Ekipman / Sayaç" },
+      { anahtar: "kategori", etiket: "Kategori" },
+      { anahtar: "kaynak", etiket: "Kaynak / Yakıt / Gaz / Şebeke" },
+      { anahtar: "miktar", etiket: "Miktar" },
+      { anahtar: "birim", etiket: "Birim" },
+      { anahtar: "donem", etiket: "Dönem" },
+      { anahtar: "bolge", etiket: "Bölge" },
+      { anahtar: "co2kg", etiket: "CO2 (kg)" },
+      { anahtar: "ch4kg", etiket: "CH4 (kg)" },
+      { anahtar: "n2okg", etiket: "N2O (kg)" },
+      { anahtar: "tco2eLD", etiket: "tCO2e (Lokasyon)" },
+      { anahtar: "tco2ePD", etiket: "tCO2e (Piyasa)" },
+      { anahtar: "ef", etiket: "EF / Metodoloji" },
+      { anahtar: "durum", etiket: "Durum" }
+    ];
+    var satirlar = [];
+    function miktarSayi(x) { var n = parseFloat(x); return isFinite(n) ? n : (x || ""); }
+
+    (v.faaliyet || []).forEach(function (s) {
+      var h = M.hesapFaaliyet(s);
+      var kapsam = M.kategoriKapsami(s.kategori);
+      var kaynakAd = (sayi(s.manuelEF) > 0) ? ("Manuel EF: " + s.manuelEF + " kgCO2e/" + (s.birim || "birim")) : (s.kaynak || "");
+      satirlar.push({
+        no: s.no || "", kapsam: kapsam, tip: "Faaliyet", ad: s.tesis || "", kategori: s.kategori || "",
+        kaynak: kaynakAd, miktar: miktarSayi(s.miktar), birim: s.birim || "", donem: s.donem || "", bolge: s.bolge || "",
+        co2kg: h.hata ? "" : h.co2kg, ch4kg: h.hata ? "" : h.ch4kg, n2okg: h.hata ? "" : h.n2okg,
+        tco2eLD: h.hata ? "" : h.tco2e, tco2ePD: h.hata ? "" : h.tco2e,
+        ef: h.hata ? "" : (h.aciklama || ""), durum: h.hata ? ("Hata: " + h.hata) : "Hesaplandı"
+      });
+    });
+    (v.sogutucu || []).forEach(function (s) {
+      var h = M.hesapSogutucu(s);
+      satirlar.push({
+        no: s.no || "", kapsam: 1, tip: "Soğutucu/Kaçak", ad: s.ekipman || "", kategori: "Kaçak Emisyon (F-gaz)",
+        kaynak: s.gaz || "", miktar: h.hata ? "" : h.kacakKg, birim: "kg (kaçak)", donem: s.donem || "", bolge: s.bolge || "",
+        co2kg: "", ch4kg: "", n2okg: "", tco2eLD: h.hata ? "" : h.tco2e, tco2ePD: h.hata ? "" : h.tco2e,
+        ef: h.hata ? "" : ("KIP " + M.fmt(h.gwp, 0) + " • " + (s.yontem || "")), durum: h.hata ? ("Hata: " + h.hata) : "Hesaplandı"
+      });
+    });
+    (v.elektrik || []).forEach(function (s) {
+      var h = M.hesapElektrik(s);
+      var efMetin = h.hata ? "" : (M.fmt(h.sebekeEF, 4) + " kgCO2e/kWh" + (sayi(s.recKwh) ? (" • REC " + M.fmt(sayi(s.recKwh), 0) + " kWh") : ""));
+      satirlar.push({
+        no: s.no || "", kapsam: 2, tip: "Elektrik", ad: s.tesis || "", kategori: "Satın Alınan Elektrik",
+        kaynak: s.sebeke || "", miktar: miktarSayi(s.kwh), birim: "kWh", donem: s.donem || "", bolge: s.sebeke || "",
+        co2kg: "", ch4kg: "", n2okg: "", tco2eLD: h.hata ? "" : h.ld, tco2ePD: h.hata ? "" : h.pd,
+        ef: efMetin, durum: h.hata ? ("Hata: " + h.hata) : "Hesaplandı"
+      });
+    });
+    return { kolonlar: kolonlar, satirlar: satirlar };
+  };
+
   return M;
 })();
