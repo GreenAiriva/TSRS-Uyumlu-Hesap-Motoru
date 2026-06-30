@@ -34,19 +34,28 @@
 <script src="data/kacak_oranlari.js"></script>
 <script src="data/yakit_ekonomisi.js"></script>
 
+<!-- ============ BULUT ALTYAPISI ============
+     Supabase istemcisi (çok-kullanıcılı veritabanı + kimlik) ve JSON Patch (geri al).
+     Yerel kopyalar (js/vendor/) — CDN bağımlılığı yok, çevrimdışı yüklenir; yalnız
+     veritabanı çağrıları internet gerektirir. -->
+<script src="js/vendor/supabase.min.js"></script>
+<script src="js/vendor/fast-json-patch.min.js"></script>
+<script src="js/sb.js"></script>
+
 <!-- ============ UYGULAMA ÇEKİRDEĞİ (js/ klasörü) ============
-     Sıralama önemlidir: depo → motor → arayüz → sayfalar -->
+     Sıralama önemlidir: depo → motor → arayüz → sayfalar → auth (bootstrap) -->
 <script src="js/depo.js"></script>
 <script src="js/motor.js"></script>
 <script src="js/arayuz.js"></script>
 <script src="js/panel.js"></script>
 <script src="js/rapor.js"></script>
 <script src="js/admin.js"></script>
+<script src="js/auth.js"></script>
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {
   try {
-    UI.basla();
+    App.basla();
   } catch (hata) {
     document.getElementById("uygulama").innerHTML =
       "<div style='max-width:640px;margin:60px auto;padding:24px;font-family:sans-serif;border:1px solid #B3402E;border-radius:4px'>" +

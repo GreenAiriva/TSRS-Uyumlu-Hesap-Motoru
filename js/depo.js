@@ -37,77 +37,210 @@ window.Depo = (function () {
     catch (e) { return varsayilan; }
   }
 
-  d.yukle = function () {
-    var ham = null;
-    try { ham = localStorage.getItem(ANAHTAR_VERI); } catch (e) {}
-    if (ham) {
-      var v = guvenliParse(ham, null);
-      if (v && typeof v === "object") {
-        d.veri = Object.assign(bosVeri(), v);
-      }
-    }
-    var hamRef = null;
-    try { hamRef = localStorage.getItem(ANAHTAR_REF); } catch (e) {}
-    if (hamRef) {
-      var r = guvenliParse(hamRef, {});
-      d.refOzel        = r.ref      || {};
-      d.ayarOzel       = r.ayar     || {};
-      d.listeOzel      = r.liste    || {};
-      d.modulTanimOzel = r.modulTanim || null;
-    }
+  /* ============================================================
+     BULUT IO (Supabase) — localStorage yerine
+     d.veri RAM'de senkron tutulur; yalnız yükle/kaydet ağ üzerinden async olur.
+     Mevcut çağıranlar (UI/admin) imzaları aynı kaldığı için etkilenmez.
+     ============================================================ */
+  d.aktifMusteriId = null;     // o an açık müşteri (customers.id)
+  d.aktifKullanici = null;     // giriş yapan profil { id, email, rol, onayli }
+  d.surumNo = 0;               // iyimser kilit sürüm numarası
+  d._sonKayit = null;          // en son kaydedilen verinin kopyası (diff/undo için)
+  d._konfigYuklendi = false;
+  d._kayitBekliyor = false;    // debounce kuyruğunda kayıt var mı
+  d._kayitUcuyor = false;      // ağ kaydı sürüyor mu
+
+  function derinKopya(x) { return JSON.parse(JSON.stringify(x)); }
+
+  // Global referans/ayar düzenlemeleri (app_config — tek satır). Bir kez yüklenir.
+  d.konfigYukle = function () {
+    if (!window.SB) return Promise.resolve();
+    return SB.from("app_config").select("ref_ozel, ayar_ozel, liste_ozel, modul_tanim").eq("id", 1).single()
+      .then(function (q) {
+        if (!q.error && q.data) {
+          d.refOzel        = q.data.ref_ozel   || {};
+          d.ayarOzel       = q.data.ayar_ozel  || {};
+          d.listeOzel      = q.data.liste_ozel || {};
+          d.modulTanimOzel = q.data.modul_tanim || null;
+        }
+        d._konfigYuklendi = true;
+      })["catch"](function () { d._konfigYuklendi = true; });
   };
 
+  // Müşteri verisini yükle. Argümansız çağrı (UI.basla'nın eski senkron çağrısı) no-op'tur.
+  d.yukle = function (musteriId) {
+    if (musteriId == null) return Promise.resolve();   // veri zaten bellekte
+    if (!window.SB) return Promise.reject(new Error("Bulut bağlantısı yok"));
+    var on = d._konfigYuklendi ? Promise.resolve() : d.konfigYukle();
+    return on.then(function () {
+      return SB.from("customers").select("data, surum_no").eq("id", musteriId).single();
+    }).then(function (q) {
+      if (q.error) throw q.error;
+      d.veri = Object.assign(bosVeri(), q.data.data || {});
+      d.aktifMusteriId = musteriId;
+      d.surumNo = q.data.surum_no || 0;
+      d._sonKayit = derinKopya(d.veri);
+    });
+  };
+
+  /* ---- Otomatik kayıt (debounce) + sürüm geçmişi (geri al) ---- */
   var kayitZamanlayici = null;
+  function ozetUret(patch) {
+    var etiket = {
+      profil: "Şirket profili", faaliyet: "Faaliyet verisi", sogutucu: "Soğutucu/kaçak",
+      elektrik: "Kapsam 2 elektrik", moduller: "TSRS açıklamaları", sektorMetrik: "Sektör metrikleri"
+    };
+    var kokler = {};
+    (patch || []).forEach(function (op) {
+      var kk = String(op.path || "").split("/")[1];
+      if (kk) kokler[kk] = true;
+    });
+    var adlar = Object.keys(kokler).map(function (kk) { return etiket[kk] || kk; });
+    return adlar.length ? adlar.join(", ") + " değişti" : "Güncelleme";
+  }
+
   d.kaydet = function (sessiz) {
+    if (!d.aktifMusteriId) return;        // müşteri seçilmeden kayıt olmaz
+    d._kayitBekliyor = true;
     clearTimeout(kayitZamanlayici);
-    kayitZamanlayici = setTimeout(function () {
-      try {
-        localStorage.setItem(ANAHTAR_VERI, JSON.stringify(d.veri));
-        localStorage.setItem(ANAHTAR_REF, JSON.stringify({
-          ref: d.refOzel, ayar: d.ayarOzel, liste: d.listeOzel, modulTanim: d.modulTanimOzel
-        }));
-        // Yedeklenmemiş değişiklik takibi: her gerçek kayıtta değişim anını güncelle
-        try { localStorage.setItem(ANAHTAR_DEGISIM_ZAMAN, new Date().toISOString()); } catch (e2) {}
-        if (!sessiz && window.UI) UI.bildir("Kaydedildi");
-      } catch (e) {
-        if (window.UI) UI.bildir("Kaydetme hatası: tarayıcı depolaması kullanılamıyor", true);
-      }
-    }, 250);
+    kayitZamanlayici = setTimeout(function () { d._flush(sessiz); }, 350);
   };
 
-  /* ---- Yedeklenmemiş değişiklik takibi (otomatik hatırlatma + çıkış uyarısı için) ----
-     sonDegisim > sonYedek  ⇒  yedeklenmemiş değişiklik var. */
-  d.sonYedekZamani = function () {
-    try { return localStorage.getItem(ANAHTAR_YEDEK_ZAMAN) || null; } catch (e) { return null; }
+  d._flush = function (sessiz) {
+    if (!d.aktifMusteriId || !window.SB) { d._kayitBekliyor = false; return Promise.resolve(); }
+    // Önceki kayıt hâlâ ağdaysa eşzamanlı yazma yapma; kısa süre sonra yeniden dene
+    if (d._kayitUcuyor) {
+      d._kayitBekliyor = true;
+      clearTimeout(kayitZamanlayici);
+      kayitZamanlayici = setTimeout(function () { d._flush(sessiz); }, 200);
+      return Promise.resolve();
+    }
+    var yeni = d.veri, eski = d._sonKayit || {};
+    var patch = null;
+    if (window.jsonpatch) {
+      try { patch = jsonpatch.compare(yeni, eski); } catch (e) { patch = null; }   // yeni→eski = ters patch (undo)
+      if (patch && patch.length === 0) { d._kayitBekliyor = false; return Promise.resolve(); }
+    }
+    d._kayitBekliyor = false; d._kayitUcuyor = true;
+    var yeniSurum = d.surumNo + 1;
+    var gonder = derinKopya(yeni);
+    return SB.from("customers").update({ data: gonder, surum_no: yeniSurum })
+      .eq("id", d.aktifMusteriId).eq("surum_no", d.surumNo).select("surum_no")
+      .then(function (upd) {
+        if (upd.error) throw upd.error;
+        if (!upd.data || !upd.data.length) {
+          d._kayitUcuyor = false;
+          if (window.UI) UI.bildir("Bu müşteriyi başka bir kullanıcı değiştirdi. Sayfayı yenileyip tekrar deneyin.", true);
+          return;
+        }
+        d.surumNo = yeniSurum;
+        d._sonKayit = gonder;
+        d._kayitUcuyor = false;
+        if (!sessiz && window.UI) UI.bildir("Kaydedildi");
+        if (patch && patch.length && window.jsonpatch) {
+          SB.from("customer_versions").insert({
+            customer_id: d.aktifMusteriId, surum_no: yeniSurum, ters_patch: patch, ozet: ozetUret(patch)
+          }).then(function () {
+            if (yeniSurum > 50) {
+              SB.from("customer_versions").delete()
+                .eq("customer_id", d.aktifMusteriId).lte("surum_no", yeniSurum - 50);
+            }
+          });
+        }
+      })["catch"](function (e) {
+        d._kayitUcuyor = false;
+        if (window.UI) UI.bildir("Kayıt hatası: " + (e.message || e), true);
+      });
   };
-  d.sonDegisimZamani = function () {
-    try { return localStorage.getItem(ANAHTAR_DEGISIM_ZAMAN) || null; } catch (e) { return null; }
+
+  /* ---- Geri Al (son sürüme dönüş — ters JSON Patch uygulanır) ---- */
+  d.geriAl = function () {
+    if (!d.aktifMusteriId || !window.SB) return Promise.resolve("Bağlantı yok");
+    if (!window.jsonpatch) return Promise.resolve("Geri alma kütüphanesi yüklenmedi");
+    var on = Promise.resolve();
+    if (d._kayitBekliyor) { clearTimeout(kayitZamanlayici); on = d._flush(true); }
+    return on.then(function () {
+      return SB.from("customer_versions").select("id, ters_patch")
+        .eq("customer_id", d.aktifMusteriId).order("surum_no", { ascending: false }).limit(1);
+    }).then(function (q) {
+      if (q.error) return q.error.message;
+      if (!q.data || !q.data.length) return "Geri alınacak işlem yok";
+      var v = q.data[0], oncekiHal;
+      try { oncekiHal = jsonpatch.applyPatch(derinKopya(d.veri), v.ters_patch).newDocument; }
+      catch (e) { return "Geri alma uygulanamadı"; }
+      var yeniSurum = d.surumNo + 1;
+      return SB.from("customers").update({ data: oncekiHal, surum_no: yeniSurum })
+        .eq("id", d.aktifMusteriId).eq("surum_no", d.surumNo).select("surum_no")
+        .then(function (upd) {
+          if (upd.error) return upd.error.message;
+          if (!upd.data || !upd.data.length) return "Çakışma: başka kullanıcı değiştirdi, sayfayı yenileyin";
+          return SB.from("customer_versions").delete().eq("id", v.id).then(function () {
+            d.surumNo = yeniSurum;
+            d.veri = Object.assign(bosVeri(), oncekiHal);
+            d._sonKayit = derinKopya(d.veri);
+            return null;   // başarı
+          });
+        });
+    });
   };
-  d.yedekZamaniniIsaretle = function () {
-    try { localStorage.setItem(ANAHTAR_YEDEK_ZAMAN, new Date().toISOString()); } catch (e) {}
+
+  /* ---- Müşteri (şirket) yönetimi ---- */
+  d.musteriListele = function () {
+    if (!window.SB) return Promise.resolve([]);
+    return SB.from("customers").select("id, unvan, nace, yil, updated_at").order("updated_at", { ascending: false })
+      .then(function (q) {
+        if (q.error) { if (window.UI) UI.bildir("Müşteri listesi alınamadı: " + q.error.message, true); return []; }
+        return q.data || [];
+      });
   };
-  // Son yedekten bu yana kaydedilmiş (yedeklenmemiş) değişiklik var mı?
-  d.yedeklenmemisDegisiklikVar = function () {
-    var sd = d.sonDegisimZamani();
-    if (!sd) return false;                 // hiç değişiklik yoksa uyarma
-    var sy = d.sonYedekZamani();
-    if (!sy) return true;                  // hiç yedek alınmamışsa ve değişiklik varsa: evet
-    return new Date(sd).getTime() > new Date(sy).getTime();
+  d.musteriOlustur = function (unvan, opts) {
+    opts = opts || {};
+    if (!window.SB) return Promise.resolve({ hata: "Bağlantı yok" });
+    var veri = Object.assign(bosVeri(), { profil: { unvan: unvan, yil: opts.yil || "", nace: opts.nace || "" } });
+    return SB.from("customers").insert({ unvan: unvan, nace: opts.nace || null, yil: opts.yil || null, data: veri })
+      .select("id").single()
+      .then(function (q) { return q.error ? { hata: q.error.message } : { id: q.data.id }; });
   };
-  // Son yedekten bu yana geçen gün sayısı (yedek hiç yoksa null)
-  d.sonYedektenBuyanaGun = function () {
-    var sy = d.sonYedekZamani();
-    if (!sy) return null;
-    return (Date.now() - new Date(sy).getTime()) / 86400000;
+  d.musteriSil = function (id) {
+    if (!window.SB) return Promise.resolve("Bağlantı yok");
+    return SB.from("customers").delete().eq("id", id).then(function (q) { return q.error ? q.error.message : null; });
   };
+  d.musteriKapat = function () {
+    d.aktifMusteriId = null; d.veri = bosVeri(); d.surumNo = 0; d._sonKayit = null;
+  };
+
+  /* ---- Global konfig (app_config) kaydı — RLS gereği yalnız admin yazabilir ---- */
+  var konfigZamanlayici = null;
+  d.konfigKaydet = function () {
+    clearTimeout(konfigZamanlayici);
+    konfigZamanlayici = setTimeout(function () {
+      if (!window.SB) return;
+      SB.from("app_config").update({
+        ref_ozel: d.refOzel, ayar_ozel: d.ayarOzel, liste_ozel: d.listeOzel,
+        modul_tanim: d.modulTanimOzel, updated_at: new Date().toISOString()
+      }).eq("id", 1).select("id").then(function (q) {
+        if (q.error) { if (window.UI) UI.bildir("Ayar kaydedilemedi (yönetici gerekir): " + q.error.message, true); }
+        else if (window.UI) UI.bildir("Referans/ayar kaydedildi");
+      });
+    }, 350);
+  };
+
+  /* ---- Yedek/değişiklik takibi (bulut modelinde sadeleştirildi) ----
+     Veri buluta otomatik kaydedildiği için yerel "yedek alın" hatırlatması susar;
+     çıkış uyarısı yalnızca devam eden/bekleyen bir kayıt varsa devreye girer. */
+  d.sonYedekZamani = function () { return null; };
+  d.sonDegisimZamani = function () { return null; };
+  d.yedekZamaniniIsaretle = function () {};
+  d.yedeklenmemisDegisiklikVar = function () { return !!(d._kayitBekliyor || d._kayitUcuyor); };
+  d.sonYedektenBuyanaGun = function () { return null; };
 
   /* ---- Veri setleri (referans tabloları) ---- */
   d.set = function (ad) {
     if (d.refOzel[ad]) return d.refOzel[ad];
     return (window.VERI && VERI[ad]) ? VERI[ad] : [];
   };
-  d.setKaydet = function (ad, satirlar) { d.refOzel[ad] = satirlar; d.kaydet(); };
-  d.setVarsayilan = function (ad) { delete d.refOzel[ad]; d.kaydet(); };
+  d.setKaydet = function (ad, satirlar) { d.refOzel[ad] = satirlar; d.konfigKaydet(); };
+  d.setVarsayilan = function (ad) { delete d.refOzel[ad]; d.konfigKaydet(); };
   d.setDegistiMi = function (ad) { return !!d.refOzel[ad]; };
 
   /* ---- Listeler ---- */
@@ -290,21 +423,20 @@ window.Depo = (function () {
     var p = guvenliParse(metin, null);
     if (!p || p.tur !== "KarbonMotoru_Yedek") return "Bu dosya bir Karbon Motoru yedeği değil.";
     d.veri = Object.assign(bosVeri(), p.veri || {});
-    d.refOzel = p.ref || {}; d.ayarOzel = p.ayar || {};
-    d.listeOzel = p.liste || {}; d.modulTanimOzel = p.modulTanim || null;
-    d.kaydet(true);
+    d.kaydet(true);   // müşteri verisini buluta yaz
+    // Referans/ayar düzenlemeleri yalnız yönetici hesabında app_config'e yazılabilir
+    if (p.ref || p.ayar || p.liste || p.modulTanim) {
+      d.refOzel = p.ref || {}; d.ayarOzel = p.ayar || {};
+      d.listeOzel = p.liste || {}; d.modulTanimOzel = p.modulTanim || null;
+      if (d.aktifKullanici && d.aktifKullanici.rol === "admin") d.konfigKaydet();
+    }
     return null;
   };
   d.sifirla = function (neler) {
-    if (neler === "girdiler" || neler === "hepsi") d.veri = bosVeri();
+    if (neler === "girdiler" || neler === "hepsi") { d.veri = bosVeri(); d._sonKayit = null; d.kaydet(true); }
     if (neler === "referans" || neler === "hepsi") {
-      d.refOzel = {}; d.ayarOzel = {}; d.listeOzel = {}; d.modulTanimOzel = null;
+      d.refOzel = {}; d.ayarOzel = {}; d.listeOzel = {}; d.modulTanimOzel = null; d.konfigKaydet();
     }
-    if (neler === "hepsi") {
-      // Yedek/değişim zaman damgalarını da temizle (yanlış çıkış uyarısı çıkmasın)
-      try { localStorage.removeItem(ANAHTAR_YEDEK_ZAMAN); localStorage.removeItem(ANAHTAR_DEGISIM_ZAMAN); } catch (e) {}
-    }
-    d.kaydet(true);
   };
 
   /* ---- Dosya indirme yardımcıları ---- */
