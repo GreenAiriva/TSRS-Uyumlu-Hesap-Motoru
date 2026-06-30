@@ -191,9 +191,13 @@ window.UI = (function () {
       R.push({ yol: "modul/" + m.id, ad: m.baslik, ikon: "•", durum: m.id, ref: m.referans,
                ciz: function (k) { cizModul(k, m.id); } });
     });
-    R.push({ grup: "Yönetim" });
-    R.push({ yol: "admin", ad: "Yönetim Paneli", ikon: "⚙", ciz: function (k) { Admin.ciz(k); },
-             ref: "Referans tabloları • listeler • form alanları • yedekleme" });
+    // Yönetim Paneli yalnız yöneticilere görünür (normal kullanıcılar sadece veri girer + rapor alır).
+    // Rota hiç eklenmediği için doğrudan #/admin'e gidilse de UI.ciz panele yönlendirir (çift güvenlik).
+    if (window.Depo && Depo.aktifKullanici && Depo.aktifKullanici.rol === "admin") {
+      R.push({ grup: "Yönetim" });
+      R.push({ yol: "admin", ad: "Yönetim Paneli", ikon: "⚙", ciz: function (k) { Admin.ciz(k); },
+               ref: "Referans tabloları • listeler • form alanları • kullanıcılar • yedekleme" });
+    }
     return R;
   }
 
