@@ -645,5 +645,140 @@ window.Motor = (function () {
     Depo.dosyaIndir(ad, JSON.stringify(d, null, 1), "application/json");
   };
 
+  /* ============================================================
+     TSRS MEVZUAT UYUM DENETİMİ (rapor doğrulama katmanı)
+     27 makine-uygulanabilir kural; rapor üreticisi bunları çalıştırıp
+     "Uyum Kontrolü" paneli basar ve uygunluk beyanını şarta bağlar.
+     Saf fonksiyondur (DOM bilmez); mevcut durumlar()/uyumMatrisi() korunur.
+     ============================================================ */
+  function PASS()  { return { durum: "gecti" }; }
+  function FAIL(m) { return { durum: "eksik", mesaj: m }; }
+  function WARN(m) { return { durum: "uyari", mesaj: m }; }
+  function NA(m)   { return { durum: "na", mesaj: m || "Uygulanamaz" }; }
+  function dolu(x) { return x != null && String(x).trim() !== ""; }
+  function modDolu(ctx, modId) {
+    var mv = ctx.mod(modId) || {};
+    var a = mv.anlatilar || {};
+    return Object.keys(a).some(function (k) { return (a[k] || "").trim(); }) || (mv.kayitlar || []).length > 0;
+  }
+  function ilkYilMuaf(ctx) {
+    var p = ctx.p || {};
+    if (p.ilkRapor && /evet/i.test(p.ilkRapor)) return true;
+    return (p.muafiyetler || []).some(function (m) { return /karşılaştırmalı|ilk yıl|ilk uygulama/i.test(m); });
+  }
+  function cilt10Secili(ctx) {
+    return (ctx.ciltler || []).some(function (c) { return c.no === 10; });
+  }
+
+  M.UYUM_KURALLARI = [
+    { id: "K01", kategori: "Metrikler", sertlik: "zorunlu", tsrsRef: "TSRS 2 md.29(a)(i)",
+      aciklama: "Kapsam 1/2/3 ayrı ve brüt (tCO2e) raporlanmalı",
+      kontrol: function (c) { return (c.T.k1.toplam > 0 || c.T.k2ld > 0 || c.T.k3.toplam > 0)
+        ? PASS() : FAIL("Hiç emisyon verisi yok; Faaliyet/Elektrik sayfalarına veri girin."); } },
+    { id: "K02", kategori: "Metrikler", sertlik: "zorunlu", tsrsRef: "TSRS 2 md.29(a)(v)",
+      aciklama: "Kapsam 2 lokasyona-dayalı ayrıca açıklanmalı",
+      kontrol: function (c) { return c.T.k2.kwh > 0 ? PASS() : NA("Elektrik tüketimi girilmemiş"); } },
+    { id: "K04", kategori: "Metodoloji", sertlik: "zorunlu", tsrsRef: "TSRS 2 md.29(a)(ii)",
+      aciklama: "Ölçüm çerçevesi / metodoloji beyanı (GHG Protokolü 2004)",
+      kontrol: function (c) { return dolu(c.ayar("metodoloji_beyani")) ? PASS() : FAIL("Metodoloji beyanı boş (Yönetim Paneli → Görünüm ve Metinler)."); } },
+    { id: "K06", kategori: "Dört Direk", sertlik: "zorunlu", tsrsRef: "TSRS 1 md.25-26",
+      aciklama: "Dört temel içerik (Yönetişim, Strateji, Risk Yönetimi, Metrikler) doldurulmalı",
+      kontrol: function (c) {
+        var eksik = ["yonetisim", "strateji", "risk_yonetimi", "hedefler"].filter(function (m) { return !modDolu(c, m); });
+        return eksik.length === 0 ? PASS() : FAIL("Eksik direk(ler): " + eksik.join(", ")); } },
+    { id: "K07", kategori: "Strateji", sertlik: "zorunlu", tsrsRef: "TSRS 2 md.22",
+      aciklama: "İklim dirençliliği / senaryo analizi açıklanmalı",
+      kontrol: function (c) { return modDolu(c, "direnclilik") ? PASS() : FAIL("Dirençlilik/Senaryo Analizi bölümü boş."); } },
+    { id: "K08", kategori: "Metrikler", sertlik: "zorunlu", tsrsRef: "TSRS 2 md.29(f)",
+      aciklama: "İç (dahili) karbon fiyatı kullanımı + fiyat açıklanmalı",
+      kontrol: function (c) { return dolu(c.p.icKarbonFiyati)
+        ? PASS() : WARN("İç karbon fiyatı belirtilmedi (Şirket Profili). Kullanılmıyorsa raporda 'uygulanmamaktadır' belirtin."); } },
+    { id: "K09", kategori: "Hedefler", sertlik: "zorunlu", tsrsRef: "TSRS 2 md.33",
+      aciklama: "Her hedef için baz dönem, hedef dönem ve kapsam belirtilmeli",
+      kontrol: function (c) {
+        var h = (c.mod("hedefler").kayitlar) || [];
+        if (!h.length) return WARN("Henüz iklim hedefi tanımlanmadı.");
+        var eksik = h.filter(function (x) { return !dolu(x.baz_yil) || !dolu(x.hedef_yil); });
+        return eksik.length ? WARN(eksik.length + " hedefte baz/hedef yılı eksik.") : PASS(); } },
+    { id: "K10", kategori: "Hedefler", sertlik: "oneri", tsrsRef: "TSRS 2 md.35",
+      aciklama: "Net hedef varsa ilgili brüt hedef de ayrıca verilmeli",
+      kontrol: function (c) {
+        var h = (c.mod("hedefler").kayitlar) || [];
+        var net = h.some(function (x) { return /net/i.test(x.tur || ""); });
+        return net ? WARN("Net hedef tespit edildi; brüt hedefin de ayrıca verildiğini doğrulayın.") : PASS(); } },
+    { id: "K11", kategori: "Karşılaştırma", sertlik: "zorunlu", tsrsRef: "TSRS 1 md.70",
+      aciklama: "Önceki dönem karşılaştırmalı bilgisi verilmeli (ilk yıl muaf)",
+      kontrol: function (c) {
+        if (ilkYilMuaf(c)) return NA("İlk uygulama yılı — karşılaştırmalı bilgi muafiyeti (TSRS 1 E3-E4).");
+        return (dolu(c.p.oncekiK1) || dolu(c.p.oncekiK2) || dolu(c.p.oncekiK3))
+          ? PASS() : WARN("Önceki dönem emisyon verisi girilmemiş (Şirket Profili)."); } },
+    { id: "K12", kategori: "Metodoloji", sertlik: "zorunlu", tsrsRef: "TSRS 1 md.77-82",
+      aciklama: "Yüksek ölçüm/tahmin belirsizliği açıklanmalı",
+      kontrol: function (c) { return c.T.toplamLD > 0 ? PASS() : NA("Emisyon verisi yok"); } },
+    { id: "K13", kategori: "Strateji", sertlik: "zorunlu", tsrsRef: "TSRS 2 md.15-21",
+      aciklama: "Finansal etkiler açıklanmalı (nicel veremiyorsa gerekçe + nitel)",
+      kontrol: function (c) { return modDolu(c, "strateji") ? PASS() : FAIL("Strateji/finansal etki bölümü boş."); } },
+    { id: "K14", kategori: "Genel", sertlik: "zorunlu", tsrsRef: "TSRS 1 md.64",
+      aciklama: "Raporlama dönemi (başlangıç/bitiş) belirtilmeli",
+      kontrol: function (c) { return (dolu(c.p.donemBas) && dolu(c.p.donemBit)) ? PASS() : FAIL("Raporlama dönemi tarihleri eksik."); } },
+    { id: "K15", kategori: "Genel", sertlik: "zorunlu", tsrsRef: "TSRS 1 md.20",
+      aciklama: "Raporlama (konsolidasyon) sınırı belirtilmeli",
+      kontrol: function (c) { return dolu(c.p.sinir) ? PASS() : FAIL("Konsolidasyon yaklaşımı/sınırı seçilmemiş."); } },
+    { id: "K16", kategori: "Genel", sertlik: "oneri", tsrsRef: "TSRS 1 md.23",
+      aciklama: "Para birimi finansal tablolarla tutarlı olmalı",
+      kontrol: function (c) { return dolu(c.ayar("para_birimi")) ? PASS() : WARN("Para birimi tanımlı değil."); } },
+    { id: "K17", kategori: "Genel", sertlik: "zorunlu", tsrsRef: "TSRS 1 md.20",
+      aciklama: "Şirket künyesi (unvan, vergi/MERSİS, NACE) tam olmalı",
+      kontrol: function (c) {
+        var eksik = ["unvan", "vergiNo", "nace"].filter(function (k) { return !dolu(c.p[k]); });
+        return eksik.length ? FAIL("Künye eksik: " + eksik.join(", ")) : PASS(); } },
+    { id: "K18", kategori: "Sektörel", sertlik: "zorunlu", tsrsRef: "TSRS 2 md.31 • Cilt 10",
+      aciklama: "Madencilik (Cilt 10) seçiliyse sektörel metrikler doldurulmalı",
+      kontrol: function (c) {
+        if (!cilt10Secili(c)) return NA("Cilt 10 (Madencilik) seçili değil.");
+        var ozet = Depo.metrikOzet ? Depo.metrikOzet() : { tam: 0, toplam: 0 };
+        return ozet.tam > 0 ? PASS() : WARN("Sektör metrikleri henüz doldurulmadı (" + ozet.tam + "/" + ozet.toplam + ")."); } },
+    { id: "K23", kategori: "Genel", sertlik: "oneri", tsrsRef: "TSRS 1 E3-E6",
+      aciklama: "Kullanılan geçiş muafiyetleri açıkça beyan edilmeli",
+      kontrol: function (c) { return (c.p.muafiyetler || []).length ? PASS() : NA("Geçiş muafiyeti kullanılmıyor."); } },
+    { id: "K26", kategori: "Strateji", sertlik: "zorunlu", tsrsRef: "TSRS 2 md.10-12",
+      aciklama: "Risk/fırsatlar fiziksel/geçiş ve zaman dilimiyle sınıflanmalı",
+      kontrol: function (c) {
+        var r = (c.mod("risk_firsat").kayitlar) || [];
+        if (!r.length) return WARN("Risk/fırsat kaydı girilmemiş.");
+        var eksik = r.filter(function (x) { return !dolu(x.tur) || !dolu(x.zaman); });
+        return eksik.length ? WARN(eksik.length + " riskte tür/zaman dilimi eksik.") : PASS(); } },
+    { id: "K20", kategori: "Genel", sertlik: "oneri", tsrsRef: "TSRS 1 md.74-76",
+      aciklama: "Önemlilik değerlendirmesi açıklanmalı",
+      kontrol: function (c) { return modDolu(c, "onemlilik") ? PASS() : WARN("Önemlilik değerlendirmesi bölümü boş."); } }
+  ];
+
+  M.uyumDenetim = function () {
+    var ctx = {
+      p: Depo.veri.profil || {},
+      T: M.toplamlar(),
+      mod: function (id) { return Depo.modulVeri(id); },
+      ayar: function (k) { return Depo.ayar(k); },
+      ciltler: Depo.seciliCiltler ? Depo.seciliCiltler() : []
+    };
+    var sonuc = M.UYUM_KURALLARI.map(function (k) {
+      var r;
+      try { r = k.kontrol(ctx); } catch (e) { r = { durum: "eksik", mesaj: "Kontrol hatası: " + (e.message || e) }; }
+      return { id: k.id, aciklama: k.aciklama, tsrsRef: k.tsrsRef, sertlik: k.sertlik,
+               kategori: k.kategori, durum: r.durum, mesaj: r.mesaj || "" };
+    });
+    var zorunluHata = sonuc.some(function (s) { return s.sertlik === "zorunlu" && s.durum === "eksik"; });
+    return {
+      kurallar: sonuc,
+      ozet: {
+        gecen: sonuc.filter(function (s) { return s.durum === "gecti"; }).length,
+        uyari: sonuc.filter(function (s) { return s.durum === "uyari"; }).length,
+        eksik: sonuc.filter(function (s) { return s.durum === "eksik"; }).length,
+        na:    sonuc.filter(function (s) { return s.durum === "na"; }).length
+      },
+      uygunlukVerilebilir: !zorunluHata
+    };
+  };
+
   return M;
 })();

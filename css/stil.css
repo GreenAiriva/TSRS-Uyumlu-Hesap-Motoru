@@ -218,13 +218,20 @@ table.veri .co2e{font-weight:600;color:var(--antrasit)}
   border-bottom:1px solid var(--cizgi);padding-bottom:6px;margin-bottom:20px;letter-spacing:.5px;text-transform:uppercase}
 .rapor-anlat{margin:8px 0 14px;white-space:pre-wrap}
 .rapor-anlat .bos{color:var(--soluk);font-style:italic}
+.rapor-sayfa .bos{color:var(--soluk);font-style:italic}
+/* Zorunlu ama doldurulmamış alanların görünür işareti — baskıda da görünür */
+.eksik-veri{color:#B3402E;background:#FBEAE7;border:1px solid #EAC5BE;border-radius:3px;
+  padding:0 4px;font-size:11px;font-weight:600;white-space:nowrap}
 @media print{
   body{background:#fff}
-  .kenar,.ust-bar,.yazdirma-gizle,.bildirim{display:none!important}
+  .kenar,.ust-bar,.yazdirma-gizle,.bildirim,.kenar-altlik,.uyum-panel{display:none!important}
   .uygulama{display:block}
   .govde{padding:0;max-width:none}
   .rapor-sayfa{border:none;box-shadow:none;margin:0;padding:10mm 6mm;page-break-after:always;max-width:none}
   .rapor-sayfa:last-child{page-break-after:auto}
+  .rapor-sayfa table,.rapor-sayfa tr{break-inside:avoid}
+  .rapor-sayfa h2{break-after:avoid}
+  .eksik-veri{-webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
 
 /* ---- Duyarlılık ---- */

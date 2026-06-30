@@ -40,17 +40,19 @@
      veritabanı çağrıları internet gerektirir. -->
 <script src="js/vendor/supabase.min.js"></script>
 <script src="js/vendor/fast-json-patch.min.js"></script>
-<script src="js/sb.js"></script>
+<script src="js/sb.js?v=2"></script>
 
 <!-- ============ UYGULAMA ÇEKİRDEĞİ (js/ klasörü) ============
-     Sıralama önemlidir: depo → motor → arayüz → sayfalar → auth (bootstrap) -->
-<script src="js/depo.js"></script>
-<script src="js/motor.js"></script>
-<script src="js/arayuz.js"></script>
-<script src="js/panel.js"></script>
-<script src="js/rapor.js"></script>
-<script src="js/admin.js"></script>
-<script src="js/auth.js"></script>
+     Sıralama önemlidir: depo → motor → arayüz → sayfalar → auth (bootstrap)
+     ?v=N sürüm damgası: dağıtımda artırınca istemciler önbellekteki eski
+     sürüm yerine güncel dosyayı çeker. -->
+<script src="js/depo.js?v=2"></script>
+<script src="js/motor.js?v=2"></script>
+<script src="js/arayuz.js?v=2"></script>
+<script src="js/panel.js?v=2"></script>
+<script src="js/rapor.js?v=2"></script>
+<script src="js/admin.js?v=2"></script>
+<script src="js/auth.js?v=2"></script>
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {

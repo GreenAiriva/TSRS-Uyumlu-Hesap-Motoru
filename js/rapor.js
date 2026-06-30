@@ -33,6 +33,44 @@ window.Rapor = (function () {
     if (!t) return "—";
     try { return new Date(t + "T00:00:00").toLocaleDateString("tr-TR"); } catch (e) { return t; }
   }
+  function dolu(x) { return x != null && String(x).trim() !== ""; }
+
+  /* Zorunlu boş alan → [VERİ BEKLENİYOR] (baskıda da görünür). */
+  var EKSIK_ET = "[VERİ BEKLENİYOR]";
+  function deg(v, bicim) {
+    if (v == null || v === "" || (typeof v === "number" && !isFinite(v)))
+      return el("span", { class: "eksik-veri" }, [EKSIK_ET]);
+    return bicim ? bicim(v) : v;
+  }
+
+  /* Uyum Kontrolü paneli (ekranda; baskıda gizli) */
+  function uyumIkon(d) { return ({ gecti: "✓", uyari: "⚠", eksik: "✗", na: "–" })[d] || "•"; }
+  function uyumRenk(d) { return ({ gecti: "#1F7A63", uyari: "#B4642D", eksik: "#B3402E", na: "#9aa0a6" })[d] || "#888"; }
+  function uyumPaneli(u) {
+    var o = u.ozet;
+    var serit = el("div", { style: "display:flex;gap:14px;flex-wrap:wrap;align-items:center;margin-bottom:10px" }, [
+      el("b", { style: "font-size:14px" }, ["TSRS Uyum Kontrolü"]),
+      el("span", { style: "color:#1F7A63;font-size:12.5px" }, ["✓ " + o.gecen + " geçti"]),
+      el("span", { style: "color:#B4642D;font-size:12.5px" }, ["⚠ " + o.uyari + " uyarı"]),
+      el("span", { style: "color:#B3402E;font-size:12.5px" }, ["✗ " + o.eksik + " eksik"]),
+      el("span", { style: "color:#9aa0a6;font-size:12.5px" }, ["– " + o.na + " N/A"]),
+      el("span", { class: "rozet", style: "background:" + (u.uygunlukVerilebilir ? "#1F7A63" : "#B3402E") + ";color:#fff;font-size:11px" },
+        [u.uygunlukVerilebilir ? "UYGUNLUK BEYANI VERİLEBİLİR" : "ZORUNLU AÇIKLAMA EKSİK"])
+    ]);
+    var liste = el("div");
+    var oncelik = { eksik: 0, uyari: 1, gecti: 2, na: 3 };
+    u.kurallar.slice().sort(function (a, b) { return oncelik[a.durum] - oncelik[b.durum]; }).forEach(function (k) {
+      liste.appendChild(el("div", { style: "display:flex;gap:8px;align-items:baseline;font-size:12px;padding:3px 0;border-bottom:1px solid #eee" }, [
+        el("span", { style: "color:" + uyumRenk(k.durum) + ";font-weight:700;min-width:14px" }, [uyumIkon(k.durum)]),
+        el("span", { style: "min-width:32px;color:#999" }, [k.id]),
+        el("span", { style: "flex:1" }, [k.aciklama, k.mesaj ? el("span", { style: "color:#B3402E" }, [" — " + k.mesaj]) : null]),
+        el("span", { style: "color:#999;font-size:10.5px;white-space:nowrap" }, [k.tsrsRef])
+      ]));
+    });
+    return el("div", { class: "uyum-panel yazdirma-gizle",
+      style: "border:1px solid #e3e0d8;border-radius:10px;padding:14px 16px;margin-bottom:16px;background:#fbfaf7" },
+      [serit, liste]);
+  }
 
   R.ciz = function (kok) {
     var p = Depo.veri.profil;
@@ -50,20 +88,34 @@ window.Rapor = (function () {
         ["Dikkat: " + T.hatalar.length + " kayıt hesaplanamadı ve toplamlara dahil edilemedi. Yazdırmadan önce düzeltmeniz önerilir."]));
     }
 
+    /* Uyum Kontrolü — mevzuat doğrulama (ekranda; baskıda gizli) */
+    var uyum = (window.Motor && Motor.uyumDenetim) ? Motor.uyumDenetim() : null;
+    if (uyum) {
+      if (!uyum.uygunlukVerilebilir) {
+        kok.appendChild(el("div", { class: "bilgi yazdirma-gizle", style: "border-left-color:#B3402E" },
+          ["Bazı zorunlu TSRS açıklamaları eksik. Rapor yine de oluşturulur (eksikler [VERİ BEKLENİYOR] olarak görünür) ama koşulsuz uygunluk beyanı verilemez. Ayrıntılar aşağıdaki panelde."]));
+      }
+      kok.appendChild(uyumPaneli(uyum));
+    }
+    var ilkYil = (p.ilkRapor && /evet/i.test(p.ilkRapor)) ||
+                 (p.muafiyetler || []).some(function (m) { return /karşılaştırmalı|ilk yıl|ilk uygulama/i.test(m); });
+
     /* ============ SAYFA 1 — Kapak, profil, metodoloji ============ */
     var s1 = el("div", { class: "rapor-sayfa" });
     s1.appendChild(el("div", { class: "strata", style: "height:8px;margin-bottom:26px" }, [
       el("span", { class: "s1" }), el("span", { class: "s2" }), el("span", { class: "s3" }), el("span", { class: "s0" })
     ]));
-    s1.appendChild(el("h1", null, ["Kurumsal Sera Gazı Envanteri ve TSRS İklim Açıklamaları"]));
+    s1.appendChild(el("h1", null, ["TSRS Uyumlu Sürdürülebilirlik Raporu"]));
     s1.appendChild(el("p", { style: "font-size:14px;margin-top:4px" }, [
       el("b", null, [p.unvan || "—"]),
       " • Raporlama Dönemi: " + tarihTR(p.donemBas) + " — " + tarihTR(p.donemBit) + " (" + (p.yil || "—") + ")"
     ]));
-    s1.appendChild(el("h2", null, ["1. Kuruluş Bilgileri"]));
+    s1.appendChild(el("p", { style: "font-size:11px;color:var(--soluk);margin:2px 0 0" }, [
+      "TSRS 1 (Genel Hükümler) ve TSRS 2 (İklimle İlgili Açıklamalar) uyarınca hazırlanmıştır."]));
+    s1.appendChild(el("h2", null, ["1. Kuruluş Bilgileri (Künye)"]));
     var t1 = el("table", null, [el("tbody", null, [
-      trS(["Ticari Unvan", p.unvan]), trS(["Vergi / MERSİS No", p.vergiNo]),
-      trS(["NACE Kodu / Sektör", (p.nace || "—") + (p.sektor ? " — " + p.sektor : "")]),
+      trS(["Ticari Unvan", deg(p.unvan)]), trS(["Vergi / MERSİS No", deg(p.vergiNo)]),
+      trS(["NACE Kodu / Sektör", dolu(p.nace) ? (p.nace + (p.sektor ? " — " + p.sektor : "")) : deg(null)]),
       trS(["Merkez Adresi", p.adres]), trS(["Rapor Sorumlusu", p.iletisim]),
       trS(["Konsolidasyon Yaklaşımı", p.sinir]),
       trS(["Baz Yıl", p.bazYil]), trS(["İlk TSRS Raporu", p.ilkRapor]),
@@ -84,20 +136,41 @@ window.Rapor = (function () {
       p.muafiyetler.forEach(function (m) { ml.appendChild(el("li", { style: "margin-bottom:4px" }, [m])); });
       s1.appendChild(ml);
     }
+    /* Uygunluk Beyanı (TSRS 1 md.72) — yalnız tüm zorunlu açıklamalar tamamsa koşulsuz verilir */
+    s1.appendChild(el("h2", null, ["Uygunluk Beyanı"]));
+    if (uyum && !uyum.uygunlukVerilebilir) {
+      var eksikler = uyum.kurallar.filter(function (k) { return k.sertlik === "zorunlu" && k.durum === "eksik"; });
+      s1.appendChild(el("div", { class: "eksik-veri", style: "padding:9px 11px;border-radius:6px;line-height:1.5" }, [
+        "Koşulsuz TSRS uygunluk beyanı, aşağıdaki zorunlu açıklamalar tamamlandığında verilebilecektir: " +
+        eksikler.map(function (k) { return k.id + " — " + k.aciklama; }).join("; ") + "."
+      ]));
+    } else {
+      s1.appendChild(anlat("Bu rapor, Türkiye Sürdürülebilirlik Raporlama Standartları " +
+        "(TSRS 1 ve TSRS 2) ile tam uyumlu olarak hazırlanmıştır. " + (p.unvan || "Kuruluş") +
+        ", bu standartların tüm zorunlu hükümlerine uyduğunu beyan eder."));
+    }
     kok.appendChild(s1);
 
     /* ============ SAYFA 2 — Emisyon özeti ============ */
     var s2 = el("div", { class: "rapor-sayfa" });
     s2.appendChild(ust(p));
     s2.appendChild(el("h1", null, ["Sera Gazı Emisyon Özeti"]));
-    s2.appendChild(el("h2", null, ["Kapsam Bazında Toplamlar (tCO2e)"]));
+    s2.appendChild(el("h2", null, ["Kapsam Bazında Brüt Toplamlar (tCO2e)"]));
+    var oncK1 = parseFloat(p.oncekiK1), oncK2 = parseFloat(p.oncekiK2), oncK3 = parseFloat(p.oncekiK3);
+    var oncTop = (isFinite(oncK1) ? oncK1 : 0) + (isFinite(oncK2) ? oncK2 : 0) + (isFinite(oncK3) ? oncK3 : 0);
+    function oncH(v) {
+      if (isFinite(v)) return { sayi: Motor.fmt(v, 2) };
+      return { sayi: ilkYil ? el("span", { class: "bos" }, ["İlk yıl — muaf"]) : deg(null) };
+    }
     var ozet = el("table", null, [
-      th(["Kapsam", { t: "Lokasyona Dayalı", sinif: "sayi" }, { t: "Piyasaya Dayalı", sinif: "sayi" }, { t: "Pay (LD)", sinif: "sayi" }]),
+      th(["Kapsam", { t: "Cari Dönem (LD)", sinif: "sayi" }, { t: "Önceki Dönem (LD)", sinif: "sayi" }, { t: "Piyasaya Dayalı", sinif: "sayi" }, { t: "Pay (LD)", sinif: "sayi" }]),
       el("tbody", null, [
-        trS([el("b", null, ["Kapsam 1 — Doğrudan"]), { sayi: Motor.fmt(T.k1.toplam, 2) }, { sayi: Motor.fmt(T.k1.toplam, 2) }, { sayi: Motor.pct(T.k1.toplam, T.toplamLD) }]),
-        trS([el("b", null, ["Kapsam 2 — Enerji Dolaylı"]), { sayi: Motor.fmt(T.k2ld, 2) }, { sayi: Motor.fmt(T.k2pd, 2) }, { sayi: Motor.pct(T.k2ld, T.toplamLD) }]),
-        trS([el("b", null, ["Kapsam 3 — Diğer Dolaylı"]), { sayi: Motor.fmt(T.k3.toplam, 2) }, { sayi: Motor.fmt(T.k3.toplam, 2) }, { sayi: Motor.pct(T.k3.toplam, T.toplamLD) }]),
-        trS([el("b", null, ["TOPLAM"]), { sayi: el("b", null, [Motor.fmt(T.toplamLD, 2)]) }, { sayi: el("b", null, [Motor.fmt(T.toplamPD, 2)]) }, { sayi: "100%" }])
+        trS([el("b", null, ["Kapsam 1 — Doğrudan (brüt)"]), { sayi: Motor.fmt(T.k1.toplam, 2) }, oncH(oncK1), { sayi: Motor.fmt(T.k1.toplam, 2) }, { sayi: Motor.pct(T.k1.toplam, T.toplamLD) }]),
+        trS([el("b", null, ["Kapsam 2 — Enerji Dolaylı (brüt)"]), { sayi: Motor.fmt(T.k2ld, 2) }, oncH(oncK2), { sayi: Motor.fmt(T.k2pd, 2) }, { sayi: Motor.pct(T.k2ld, T.toplamLD) }]),
+        trS([el("b", null, ["Kapsam 3 — Diğer Dolaylı (brüt)"]), { sayi: Motor.fmt(T.k3.toplam, 2) }, oncH(oncK3), { sayi: Motor.fmt(T.k3.toplam, 2) }, { sayi: Motor.pct(T.k3.toplam, T.toplamLD) }]),
+        trS([el("b", null, ["TOPLAM"]), { sayi: el("b", null, [Motor.fmt(T.toplamLD, 2)]) },
+          { sayi: oncTop ? el("b", null, [Motor.fmt(oncTop, 2)]) : (ilkYil ? el("span", { class: "bos" }, ["—"]) : deg(null)) },
+          { sayi: el("b", null, [Motor.fmt(T.toplamPD, 2)]) }, { sayi: "100%" }])
       ])
     ]);
     s2.appendChild(ozet);
@@ -128,6 +201,12 @@ window.Rapor = (function () {
       "Toplam tüketim " + Motor.fmt(T.k2.kwh, 0) + " kWh olup bunun " + Motor.fmt(T.k2.recKwh, 0) +
       " kWh'ı (" + Motor.pct(T.k2.recKwh, T.k2.kwh) + ") yenilenebilir enerji sertifikası (REC) ile belgelendirilmiştir. " +
       "Piyasaya dayalı yaklaşımda sertifikalı tüketime sıfır emisyon faktörü uygulanmıştır."
+    ]));
+    s2.appendChild(el("h2", null, ["İç Karbon Fiyatı (TSRS 2 md. 29(f))"]));
+    s2.appendChild(el("p", null, [
+      dolu(p.icKarbonFiyati)
+        ? ("Kuruluş, karar alma süreçlerinde her metrik ton emisyon için aşağıdaki iç karbon fiyatını uygulamaktadır: " + p.icKarbonFiyati + ".")
+        : el("span", { class: "eksik-veri" }, [EKSIK_ET + " — İç karbon fiyatı uygulanıyorsa fiyatı (ör. ₺/tCO2e) Şirket Profili'nde belirtin; uygulanmıyorsa raporda 'uygulanmamaktadır' olarak beyan edilmelidir."])
     ]));
     kok.appendChild(s2);
 

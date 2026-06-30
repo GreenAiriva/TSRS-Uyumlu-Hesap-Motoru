@@ -621,6 +621,17 @@ window.UI = (function () {
       profilAlan({ anahtar: "dogrulayici", etiket: "Doğrulayıcı Kuruluş", tip: "metin" })
     ])]));
 
+    kok.appendChild(UI.kart("Karşılaştırmalı Bilgi ve İç Karbon Fiyatı", [
+      el("p", { style: "margin:0 0 12px;font-size:12.5px;color:var(--soluk)" },
+        ["TSRS 1 md. 70 önceki dönem karşılaştırması ister (ilk uygulama yılında muaf). TSRS 2 md. 29(f) iç karbon fiyatı açıklaması ister — uygulanmıyorsa boş bırakın, rapor 'uygulanmamaktadır' yazar. Bu alanlar rapora ve uyum kontrolüne otomatik yansır."]),
+      el("div", { class: "form-izgara" }, [
+        profilAlan({ anahtar: "oncekiK1", etiket: "Önceki Dönem Kapsam 1 (tCO2e)", tip: "sayi", yardim: "Geçen yılın doğrudan emisyon toplamı" }),
+        profilAlan({ anahtar: "oncekiK2", etiket: "Önceki Dönem Kapsam 2 (tCO2e)", tip: "sayi", yardim: "Geçen yılın enerji dolaylı emisyonu (lokasyona dayalı)" }),
+        profilAlan({ anahtar: "oncekiK3", etiket: "Önceki Dönem Kapsam 3 (tCO2e)", tip: "sayi", yardim: "Geçen yılın diğer dolaylı emisyonu" }),
+        profilAlan({ anahtar: "icKarbonFiyati", etiket: "İç Karbon Fiyatı", tip: "metin", yardim: "örn. 25 ₺/tCO2e — uygulanmıyorsa boş bırakın" })
+      ])
+    ]));
+
     /* TSRS geçiş muafiyetleri — çoklu seçim */
     var secili = Depo.veri.profil.muafiyetler || [];
     var kutular = el("div", { style: "display:grid;gap:9px" },
