@@ -670,87 +670,117 @@ window.Motor = (function () {
     return (ctx.ciltler || []).some(function (c) { return c.no === 10; });
   }
 
+  function metrikDoluKod(kod) { var v = Depo.metrikVeri ? Depo.metrikVeri(kod) : {}; return dolu(v.deger) || dolu(v.metin); }
+
   M.UYUM_KURALLARI = [
-    { id: "K01", kategori: "Metrikler", sertlik: "zorunlu", tsrsRef: "TSRS 2 md.29(a)(i)",
+    { id: "K01", kategori: "Metrikler", sertlik: "zorunlu", tsrsRef: "TSRS 2 md.29(a)(i)", bolum: "5.1 Emisyon Özeti",
       aciklama: "Kapsam 1/2/3 ayrı ve brüt (tCO2e) raporlanmalı",
       kontrol: function (c) { return (c.T.k1.toplam > 0 || c.T.k2ld > 0 || c.T.k3.toplam > 0)
         ? PASS() : FAIL("Hiç emisyon verisi yok; Faaliyet/Elektrik sayfalarına veri girin."); } },
-    { id: "K02", kategori: "Metrikler", sertlik: "zorunlu", tsrsRef: "TSRS 2 md.29(a)(v)",
+    { id: "K02", kategori: "Metrikler", sertlik: "zorunlu", tsrsRef: "TSRS 2 md.29(a)(v)", bolum: "5.1 Emisyon Özeti",
       aciklama: "Kapsam 2 lokasyona-dayalı ayrıca açıklanmalı",
       kontrol: function (c) { return c.T.k2.kwh > 0 ? PASS() : NA("Elektrik tüketimi girilmemiş"); } },
-    { id: "K04", kategori: "Metodoloji", sertlik: "zorunlu", tsrsRef: "TSRS 2 md.29(a)(ii)",
+    { id: "K03", kategori: "Metrikler", sertlik: "oneri", tsrsRef: "TSRS 2 md.29(a)(iv)", bolum: "1.2 Organizasyonel Sınır",
+      aciklama: "Kapsam 1/2 konsolide grup ile diğer yatırımlar arasında ayrıştırılmalı",
+      kontrol: function (c) { return dolu(c.p.konsolidasyon)
+        ? PASS() : WARN("Konsolide grup/diğer yatırım ayrıştırması veya sınır açıklaması girilmemiş (Şirket Profili)."); } },
+    { id: "K04", kategori: "Metodoloji", sertlik: "zorunlu", tsrsRef: "TSRS 2 md.29(a)(ii)", bolum: "1.3 Metodoloji",
       aciklama: "Ölçüm çerçevesi / metodoloji beyanı (GHG Protokolü 2004)",
       kontrol: function (c) { return dolu(c.ayar("metodoloji_beyani")) ? PASS() : FAIL("Metodoloji beyanı boş (Yönetim Paneli → Görünüm ve Metinler)."); } },
-    { id: "K06", kategori: "Dört Direk", sertlik: "zorunlu", tsrsRef: "TSRS 1 md.25-26",
+    { id: "K05", kategori: "Genel", sertlik: "zorunlu", tsrsRef: "TSRS 1 md.72", bolum: "1.5 Uygunluk Beyanı",
+      aciklama: "Açık ve koşulsuz uygunluk beyanı (tüm zorunlular sağlandığında)",
+      kontrol: function () { return PASS(); } },   // durum uyumDenetim'de türetilir
+    { id: "K06", kategori: "Dört Direk", sertlik: "zorunlu", tsrsRef: "TSRS 1 md.25-26", bolum: "2–5 (Dört Direk)",
       aciklama: "Dört temel içerik (Yönetişim, Strateji, Risk Yönetimi, Metrikler) doldurulmalı",
       kontrol: function (c) {
         var eksik = ["yonetisim", "strateji", "risk_yonetimi", "hedefler"].filter(function (m) { return !modDolu(c, m); });
         return eksik.length === 0 ? PASS() : FAIL("Eksik direk(ler): " + eksik.join(", ")); } },
-    { id: "K07", kategori: "Strateji", sertlik: "zorunlu", tsrsRef: "TSRS 2 md.22",
+    { id: "K07", kategori: "Strateji", sertlik: "zorunlu", tsrsRef: "TSRS 2 md.22", bolum: "3.3 Dirençlilik/Senaryo",
       aciklama: "İklim dirençliliği / senaryo analizi açıklanmalı",
       kontrol: function (c) { return modDolu(c, "direnclilik") ? PASS() : FAIL("Dirençlilik/Senaryo Analizi bölümü boş."); } },
-    { id: "K08", kategori: "Metrikler", sertlik: "zorunlu", tsrsRef: "TSRS 2 md.29(f)",
+    { id: "K08", kategori: "Metrikler", sertlik: "zorunlu", tsrsRef: "TSRS 2 md.29(f)", bolum: "5.1 İç Karbon Fiyatı",
       aciklama: "İç (dahili) karbon fiyatı kullanımı + fiyat açıklanmalı",
       kontrol: function (c) { return dolu(c.p.icKarbonFiyati)
         ? PASS() : WARN("İç karbon fiyatı belirtilmedi (Şirket Profili). Kullanılmıyorsa raporda 'uygulanmamaktadır' belirtin."); } },
-    { id: "K09", kategori: "Hedefler", sertlik: "zorunlu", tsrsRef: "TSRS 2 md.33",
+    { id: "K09", kategori: "Hedefler", sertlik: "zorunlu", tsrsRef: "TSRS 2 md.33", bolum: "5.4 İklim Hedefleri",
       aciklama: "Her hedef için baz dönem, hedef dönem ve kapsam belirtilmeli",
       kontrol: function (c) {
         var h = (c.mod("hedefler").kayitlar) || [];
         if (!h.length) return WARN("Henüz iklim hedefi tanımlanmadı.");
         var eksik = h.filter(function (x) { return !dolu(x.baz_yil) || !dolu(x.hedef_yil); });
         return eksik.length ? WARN(eksik.length + " hedefte baz/hedef yılı eksik.") : PASS(); } },
-    { id: "K10", kategori: "Hedefler", sertlik: "oneri", tsrsRef: "TSRS 2 md.35",
+    { id: "K10", kategori: "Hedefler", sertlik: "oneri", tsrsRef: "TSRS 2 md.35", bolum: "5.4 İklim Hedefleri",
       aciklama: "Net hedef varsa ilgili brüt hedef de ayrıca verilmeli",
       kontrol: function (c) {
         var h = (c.mod("hedefler").kayitlar) || [];
         var net = h.some(function (x) { return /net/i.test(x.tur || ""); });
         return net ? WARN("Net hedef tespit edildi; brüt hedefin de ayrıca verildiğini doğrulayın.") : PASS(); } },
-    { id: "K11", kategori: "Karşılaştırma", sertlik: "zorunlu", tsrsRef: "TSRS 1 md.70",
+    { id: "K11", kategori: "Karşılaştırma", sertlik: "zorunlu", tsrsRef: "TSRS 1 md.70", bolum: "5.1 Emisyon Özeti",
       aciklama: "Önceki dönem karşılaştırmalı bilgisi verilmeli (ilk yıl muaf)",
       kontrol: function (c) {
         if (ilkYilMuaf(c)) return NA("İlk uygulama yılı — karşılaştırmalı bilgi muafiyeti (TSRS 1 E3-E4).");
         return (dolu(c.p.oncekiK1) || dolu(c.p.oncekiK2) || dolu(c.p.oncekiK3))
           ? PASS() : WARN("Önceki dönem emisyon verisi girilmemiş (Şirket Profili)."); } },
-    { id: "K12", kategori: "Metodoloji", sertlik: "zorunlu", tsrsRef: "TSRS 1 md.77-82",
+    { id: "K12", kategori: "Metodoloji", sertlik: "zorunlu", tsrsRef: "TSRS 1 md.77-82", bolum: "5.6 Tahmin Belirsizliği",
       aciklama: "Yüksek ölçüm/tahmin belirsizliği açıklanmalı",
       kontrol: function (c) { return c.T.toplamLD > 0 ? PASS() : NA("Emisyon verisi yok"); } },
-    { id: "K13", kategori: "Strateji", sertlik: "zorunlu", tsrsRef: "TSRS 2 md.15-21",
+    { id: "K13", kategori: "Strateji", sertlik: "zorunlu", tsrsRef: "TSRS 2 md.15-21", bolum: "3.1 Strateji",
       aciklama: "Finansal etkiler açıklanmalı (nicel veremiyorsa gerekçe + nitel)",
       kontrol: function (c) { return modDolu(c, "strateji") ? PASS() : FAIL("Strateji/finansal etki bölümü boş."); } },
-    { id: "K14", kategori: "Genel", sertlik: "zorunlu", tsrsRef: "TSRS 1 md.64",
+    { id: "K14", kategori: "Genel", sertlik: "zorunlu", tsrsRef: "TSRS 1 md.64", bolum: "1.1 Künye",
       aciklama: "Raporlama dönemi (başlangıç/bitiş) belirtilmeli",
       kontrol: function (c) { return (dolu(c.p.donemBas) && dolu(c.p.donemBit)) ? PASS() : FAIL("Raporlama dönemi tarihleri eksik."); } },
-    { id: "K15", kategori: "Genel", sertlik: "zorunlu", tsrsRef: "TSRS 1 md.20",
+    { id: "K15", kategori: "Genel", sertlik: "zorunlu", tsrsRef: "TSRS 1 md.20", bolum: "1.2 Organizasyonel Sınır",
       aciklama: "Raporlama (konsolidasyon) sınırı belirtilmeli",
       kontrol: function (c) { return dolu(c.p.sinir) ? PASS() : FAIL("Konsolidasyon yaklaşımı/sınırı seçilmemiş."); } },
-    { id: "K16", kategori: "Genel", sertlik: "oneri", tsrsRef: "TSRS 1 md.23",
+    { id: "K16", kategori: "Genel", sertlik: "oneri", tsrsRef: "TSRS 1 md.23", bolum: "1.1 Künye",
       aciklama: "Para birimi finansal tablolarla tutarlı olmalı",
       kontrol: function (c) { return dolu(c.ayar("para_birimi")) ? PASS() : WARN("Para birimi tanımlı değil."); } },
-    { id: "K17", kategori: "Genel", sertlik: "zorunlu", tsrsRef: "TSRS 1 md.20",
+    { id: "K17", kategori: "Genel", sertlik: "zorunlu", tsrsRef: "TSRS 1 md.20", bolum: "1.1 Künye",
       aciklama: "Şirket künyesi (unvan, vergi/MERSİS, NACE) tam olmalı",
       kontrol: function (c) {
         var eksik = ["unvan", "vergiNo", "nace"].filter(function (k) { return !dolu(c.p[k]); });
         return eksik.length ? FAIL("Künye eksik: " + eksik.join(", ")) : PASS(); } },
-    { id: "K18", kategori: "Sektörel", sertlik: "zorunlu", tsrsRef: "TSRS 2 md.31 • Cilt 10",
+    { id: "K18", kategori: "Sektörel", sertlik: "zorunlu", tsrsRef: "TSRS 2 md.31 • Cilt 10", bolum: "5.3 Sektörel Metrikler",
       aciklama: "Madencilik (Cilt 10) seçiliyse sektörel metrikler doldurulmalı",
       kontrol: function (c) {
         if (!cilt10Secili(c)) return NA("Cilt 10 (Madencilik) seçili değil.");
         var ozet = Depo.metrikOzet ? Depo.metrikOzet() : { tam: 0, toplam: 0 };
         return ozet.tam > 0 ? PASS() : WARN("Sektör metrikleri henüz doldurulmadı (" + ozet.tam + "/" + ozet.toplam + ")."); } },
-    { id: "K23", kategori: "Genel", sertlik: "oneri", tsrsRef: "TSRS 1 E3-E6",
+    { id: "K19", kategori: "Sektörel", sertlik: "zorunlu", tsrsRef: "Cilt 10 EM-MM-110a.1", bolum: "5.3 Sektörel Metrikler",
+      aciklama: "EM-MM-110a.1: brüt Kapsam 1 + emisyon düzenlemesi kapsamındaki yüzde",
+      kontrol: function (c) { if (!cilt10Secili(c)) return NA("Cilt 10 seçili değil.");
+        return metrikDoluKod("EM-MM-110a.1") ? PASS() : WARN("EM-MM-110a.1 (brüt K1 + düzenleme %) girilmemiş."); } },
+    { id: "K20", kategori: "Sektörel", sertlik: "zorunlu", tsrsRef: "Cilt 10 EM-MM-130a.1", bolum: "5.3 Sektörel Metrikler",
+      aciklama: "EM-MM-130a.1: toplam enerji (GJ), şebeke %, yenilenebilir %",
+      kontrol: function (c) { if (!cilt10Secili(c)) return NA("Cilt 10 seçili değil.");
+        return metrikDoluKod("EM-MM-130a.1") ? PASS() : WARN("EM-MM-130a.1 (enerji) girilmemiş."); } },
+    { id: "K21", kategori: "Sektörel", sertlik: "zorunlu", tsrsRef: "Cilt 10 EM-MM-140a.1", bolum: "5.3 Sektörel Metrikler",
+      aciklama: "EM-MM-140a.1: çekilen/tüketilen su + su stresi %",
+      kontrol: function (c) { if (!cilt10Secili(c)) return NA("Cilt 10 seçili değil.");
+        return metrikDoluKod("EM-MM-140a.1") ? PASS() : WARN("EM-MM-140a.1 (su) girilmemiş."); } },
+    { id: "K22", kategori: "Genel", sertlik: "oneri", tsrsRef: "TSRS 1 md.B29", bolum: "Genel",
+      aciklama: "Veri olmayan zorunlu alanlar [VERİ BEKLENİYOR] ile işaretlenir (gizlenmez)",
+      kontrol: function () { return PASS(); } },   // rapor üreticisi deg() ile sağlar
+    { id: "K23", kategori: "Genel", sertlik: "oneri", tsrsRef: "TSRS 1 E3-E6", bolum: "1.4 Geçiş Muafiyetleri",
       aciklama: "Kullanılan geçiş muafiyetleri açıkça beyan edilmeli",
       kontrol: function (c) { return (c.p.muafiyetler || []).length ? PASS() : NA("Geçiş muafiyeti kullanılmıyor."); } },
-    { id: "K26", kategori: "Strateji", sertlik: "zorunlu", tsrsRef: "TSRS 2 md.10-12",
+    { id: "K24", kategori: "Genel", sertlik: "oneri", tsrsRef: "TSRS 1 md.37", bolum: "Genel",
+      aciklama: "Aşırı maliyet/çaba veya orantılılıkla sınırlanan açıklamalar gerekçelenmeli",
+      kontrol: function () { return PASS(); } },   // gerekçe serbest metinde; bilgilendirme
+    { id: "K25", kategori: "Genel", sertlik: "zorunlu", tsrsRef: "TSRS 1 md.60-63", bolum: "Kapak / 1. Giriş",
+      aciklama: "Rapor 'TSRS Uyumlu Sürdürülebilirlik Raporu' başlığıyla ayrı bölüm olarak sunulmalı",
+      kontrol: function () { return PASS(); } },   // kapak/başlık üretici tarafından garanti
+    { id: "K26", kategori: "Strateji", sertlik: "zorunlu", tsrsRef: "TSRS 2 md.10-12", bolum: "3.2 Risk ve Fırsatlar",
       aciklama: "Risk/fırsatlar fiziksel/geçiş ve zaman dilimiyle sınıflanmalı",
       kontrol: function (c) {
         var r = (c.mod("risk_firsat").kayitlar) || [];
         if (!r.length) return WARN("Risk/fırsat kaydı girilmemiş.");
         var eksik = r.filter(function (x) { return !dolu(x.tur) || !dolu(x.zaman); });
         return eksik.length ? WARN(eksik.length + " riskte tür/zaman dilimi eksik.") : PASS(); } },
-    { id: "K20", kategori: "Genel", sertlik: "oneri", tsrsRef: "TSRS 1 md.74-76",
-      aciklama: "Önemlilik değerlendirmesi açıklanmalı",
-      kontrol: function (c) { return modDolu(c, "onemlilik") ? PASS() : WARN("Önemlilik değerlendirmesi bölümü boş."); } }
+    { id: "K27", kategori: "Strateji", sertlik: "oneri", tsrsRef: "TSRS 2 md.14", bolum: "3.1 Strateji (Geçiş Planı)",
+      aciklama: "İklimle ilgili geçiş planı açıklanmalı",
+      kontrol: function (c) { return modDolu(c, "strateji") ? PASS() : WARN("Geçiş planı / strateji bölümü boş."); } }
   ];
 
   M.uyumDenetim = function () {
@@ -765,9 +795,17 @@ window.Motor = (function () {
       var r;
       try { r = k.kontrol(ctx); } catch (e) { r = { durum: "eksik", mesaj: "Kontrol hatası: " + (e.message || e) }; }
       return { id: k.id, aciklama: k.aciklama, tsrsRef: k.tsrsRef, sertlik: k.sertlik,
-               kategori: k.kategori, durum: r.durum, mesaj: r.mesaj || "" };
+               kategori: k.kategori, bolum: k.bolum || "", durum: r.durum, mesaj: r.mesaj || "" };
     });
-    var zorunluHata = sonuc.some(function (s) { return s.sertlik === "zorunlu" && s.durum === "eksik"; });
+    // Zorunlu hata (K05 hariç — K05 bunun türevidir)
+    var zorunluHata = sonuc.some(function (s) { return s.id !== "K05" && s.sertlik === "zorunlu" && s.durum === "eksik"; });
+    // K05 (uygunluk beyanı) türetilir: tüm zorunlular sağlandıysa geçti, değilse eksik
+    sonuc.forEach(function (s) {
+      if (s.id === "K05") {
+        s.durum = zorunluHata ? "eksik" : "gecti";
+        s.mesaj = zorunluHata ? "Eksik zorunlu açıklamalar nedeniyle koşulsuz uygunluk beyanı verilemez." : "";
+      }
+    });
     return {
       kurallar: sonuc,
       ozet: {
