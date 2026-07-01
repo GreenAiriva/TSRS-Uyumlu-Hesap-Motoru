@@ -1095,6 +1095,111 @@ window.UI = (function () {
         paketGirdi
       ])
     ], { kapsam: "k1" }));
+
+    /* ---- Boş Alan Manifestosu (kapsam kontrolü) ---- */
+    (function () {
+      var ozet = Depo.bosAlanOzeti();
+      var satirlar = Object.keys(ozet.gruplar).map(function (g) {
+        var x = ozet.gruplar[g];
+        return el("tr", null, [
+          el("td", { style: "padding:3px 8px" }, [g]),
+          el("td", { style: "padding:3px 8px;text-align:right" }, [String(x.toplam)]),
+          el("td", { style: "padding:3px 8px;text-align:right;font-weight:600;color:" + (x.bos ? "var(--oksit)" : "var(--soluk)") }, [String(x.bos)])
+        ]);
+      });
+      kok.appendChild(UI.kart("Boş Alan Manifestosu (kapsam kontrolü)", [
+        el("p", { style: "margin:0 0 10px;font-size:13px" },
+          ["Bu müşteri için uygulamadaki TÜM doldurulabilir alanların (profil, 10 TSRS modülü, sektör metrikleri, veri dizileri) doldurulma durumu. " +
+           "Belgelerden hangi bilgileri çıkarmamız gerektiğinin tam listesi ve “hepsini kapsadık mı” kontrolüdür."]),
+        el("div", { class: "bilgi", style: "margin-bottom:10px" }, [
+          el("b", null, [String(ozet.toplam)]), " hedef alan • ",
+          el("b", { style: "color:var(--soluk)" }, [String(ozet.dolu) + " dolu"]), " • ",
+          el("b", { style: "color:var(--oksit)" }, [String(ozet.bos) + " boş"])
+        ]),
+        el("div", { style: "overflow:auto;max-height:260px;border:1px solid var(--cizgi,#e0e0e0);border-radius:6px;margin-bottom:12px" }, [
+          el("table", { style: "width:100%;border-collapse:collapse;font-size:12.5px" }, [
+            el("thead", null, [el("tr", { style: "position:sticky;top:0;background:var(--yuzey,#fafafa)" }, [
+              el("th", { style: "padding:5px 8px;text-align:left" }, ["Bölüm"]),
+              el("th", { style: "padding:5px 8px;text-align:right" }, ["Alan"]),
+              el("th", { style: "padding:5px 8px;text-align:right" }, ["Boş"])
+            ])]),
+            el("tbody", null, satirlar)
+          ])
+        ]),
+        el("button", { class: "btn", type: "button", onclick: function () {
+          Depo.bosAlanManifestoIndir(); UI.bildir("Boş alan manifestosu indiriliyor");
+        } }, ["⬇ Boş Alan Manifestosunu İndir (CSV)"])
+      ]));
+    })();
+
+    /* ---- Belgeden Çıkarılan Paketi Yükle (yalnız boş doldur) ---- */
+    var ipGirdi = el("input", { type: "file", accept: ".json,application/json", style: "font:inherit;font-size:13px" });
+    var ipOnizleme = el("div", { style: "margin-top:12px" });
+    function ipOnizlemeCiz(paket, a) {
+      ipOnizleme.innerHTML = "";
+      var cakismaSecim = {};
+      ipOnizleme.appendChild(el("div", { class: "bilgi" }, [
+        el("b", null, [a.dolacak.length + " boş alan dolacak"]), " • " + a.zatenDolu.length + " zaten dolu (atlanır) • ",
+        el("b", { style: a.cakisma.length ? "color:var(--oksit)" : "" }, [a.cakisma.length + " çakışma"]), " • ",
+        el("b", null, [a.eklenecekKayit + " kayıt eklenecek"]), (a.dedupAtlanacak ? " • " + a.dedupAtlanacak + " tekrar atlanacak" : ""),
+        a.kaynakBelgeler.length ? el("div", { style: "margin-top:6px;font-size:12px;color:var(--soluk)" }, ["Kaynak belgeler: " + a.kaynakBelgeler.join(", ")]) : ""
+      ]));
+      if (a.dolacak.length) {
+        ipOnizleme.appendChild(el("div", { style: "font-weight:600;margin:10px 0 4px;font-size:13px" }, ["Dolacak boş alanlar:"]));
+        ipOnizleme.appendChild(el("div", { style: "max-height:200px;overflow:auto;font-size:12px;border:1px solid var(--cizgi,#e0e0e0);border-radius:6px;padding:6px" },
+          a.dolacak.map(function (x) {
+            return el("div", { style: "padding:3px 0" }, [
+              el("code", { style: "color:var(--vurgu,#1565c0)" }, [x.yol]), ": ", UI.kisalt(String(x.deger), 90),
+              x.kaynak ? el("span", { style: "color:var(--soluk)" }, [" — " + x.kaynak]) : ""
+            ]);
+          })));
+      }
+      if (a.cakisma.length) {
+        ipOnizleme.appendChild(el("div", { style: "font-weight:600;margin:12px 0 4px;font-size:13px;color:var(--oksit)" },
+          ["Çakışmalar — mevcut veri KORUNUR; üzerine yazmak isterseniz işaretleyin:"]));
+        a.cakisma.forEach(function (c) {
+          var cb = el("input", { type: "checkbox", style: "margin-right:6px" });
+          cb.addEventListener("change", function () { cakismaSecim[c.yol] = cb.checked; });
+          ipOnizleme.appendChild(el("label", { style: "display:block;font-size:12px;padding:4px 0;cursor:pointer" }, [
+            cb, el("code", { style: "color:var(--vurgu,#1565c0)" }, [c.yol]),
+            el("div", { style: "margin-left:22px;color:var(--soluk)" }, ["Mevcut: " + UI.kisalt(String(c.mevcut), 60) + "  →  Yeni: " + UI.kisalt(String(c.yeni), 60)])
+          ]));
+        });
+      }
+      var uygulaBtn = el("button", { class: "btn birincil", type: "button", style: "margin-top:12px" }, ["✓ Boşları Doldur ve Kayıtları Ekle"]);
+      uygulaBtn.addEventListener("click", function () {
+        var yollar = Object.keys(cakismaSecim).filter(function (y) { return cakismaSecim[y]; });
+        UI.onayla(a.dolacak.length + " boş alan doldurulacak, " + a.eklenecekKayit + " kayıt eklenecek" +
+          (yollar.length ? ", " + yollar.length + " dolu alanın ÜZERİNE YAZILACAK" : "") +
+          ". İşaretlenmeyen dolu veriler korunur. Devam edilsin mi?", function () {
+          var s = Depo.iceAktarimUygula(paket, { cakismaYollari: yollar });
+          UI.bildir(s.dolduruldu + " alan dolduruldu, " + s.eklenenKayit + " kayıt eklendi");
+          UI.ciz();
+        });
+      });
+      ipOnizleme.appendChild(uygulaBtn);
+    }
+    ipGirdi.addEventListener("change", function () {
+      var f = ipGirdi.files[0]; if (!f) return;
+      var okuyucu = new FileReader();
+      okuyucu.onload = function () {
+        var paket = null;
+        try { paket = JSON.parse(String(okuyucu.result)); } catch (e) {}
+        var a = Depo.iceAktarimAnaliz(paket);
+        ipOnizleme.innerHTML = "";
+        if (a.hata) ipOnizleme.appendChild(el("div", { class: "bilgi", style: "border-left-color:var(--oksit)" }, [UI.kacir(a.hata)]));
+        else ipOnizlemeCiz(paket, a);
+        ipGirdi.value = "";
+      };
+      okuyucu.readAsText(f, "utf-8");
+    });
+    kok.appendChild(UI.kart("Belgeden Çıkarılan Paketi Yükle (yalnız boş doldur)", [
+      el("p", { style: "margin:0 0 10px;font-size:13px" },
+        ["Yerelde belgelerden (PDF/Excel/MD) çıkarılıp hazırlanan “İçe Aktarım Paketi” JSON dosyasını yükleyin. " +
+         "Yalnızca BOŞ alanları doldurur, mevcut verilerinizi EZMEZ; faaliyet/elektrik/soğutucu kayıtlarını tekrarsız ekler; " +
+         "her değerin belge kaynağını (denetlenebilirlik için) saklar. Yükleme öncesi ne olacağını önizlersiniz."]),
+      ipGirdi, ipOnizleme
+    ], { kapsam: "k3" }));
   }
 
   function cizFaaliyet(kok) {

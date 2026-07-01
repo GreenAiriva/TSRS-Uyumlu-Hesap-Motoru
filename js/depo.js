@@ -566,6 +566,235 @@ window.Depo = (function () {
     return sonuc;
   };
 
+  /* ============================================================
+     BELGEDEN İÇE AKTARIM — "yalnız boş doldur" + kaynak izi
+     ------------------------------------------------------------
+     Dağınık müşteri belgeleri (PDF/Excel/MD) yerelde parse edilip
+     "birleşik içe aktarım paketi" (tur: KarbonMotoru_IceAktarimPaketi)
+     olarak üretilir. Bu paket açık müşteriye:
+       • skaler alanları YALNIZ BOŞSA doldurur (mevcut veriyi ezmez),
+       • faaliyet/elektrik/soğutucu ve modül kayıtlarını dedup ile EKLER,
+       • her doldurulan alanın kaynağını d.veri.kaynaklar[yol]'da izler.
+     Ham belge DB'ye GİRMEZ; yalnız yapılandırılmış paket girer.
+     ============================================================ */
+
+  // Bir değer "boş" mu? (undefined/null/boş metin/boş dizi/boş nesne)
+  function bosMu(v) {
+    if (v == null) return true;
+    if (typeof v === "string") return v.trim() === "";
+    if (Array.isArray(v)) return v.length === 0;
+    if (typeof v === "object") return Object.keys(v).length === 0;
+    return false;
+  }
+  // Nokta-yol ile oku: yolOku(obj, "profil.nace")
+  function yolOku(kok, yol) {
+    var p = String(yol).split("."), o = kok;
+    for (var i = 0; i < p.length; i++) { if (o == null) return undefined; o = o[p[i]]; }
+    return o;
+  }
+  // Nokta-yol ile yaz (ara nesneleri oluşturur): yolYaz(obj, "sektorMetrik.EM-MM-110a.1.deger", v)
+  function yolYaz(kok, yol, deger) {
+    var p = String(yol).split("."), o = kok;
+    for (var i = 0; i < p.length - 1; i++) {
+      if (o[p[i]] == null || typeof o[p[i]] !== "object") o[p[i]] = {};
+      o = o[p[i]];
+    }
+    o[p[p.length - 1]] = deger;
+  }
+
+  /* ---- Profil (künye) skaler alan kataloğu ----
+     KAYNAK: arayuz.js cizProfil formu. Form alanı eklerseniz buraya da ekleyin
+     (modüller ve sektör metrikleri şemadan otomatik gelir; profil formu satır-içi
+     olduğundan burada elle tutulur). */
+  d.HEDEF_PROFIL = [
+    { anahtar: "unvan", etiket: "Ticari Unvan", tip: "metin" },
+    { anahtar: "vergiNo", etiket: "Vergi / MERSİS No", tip: "metin" },
+    { anahtar: "nace", etiket: "NACE Kodu", tip: "metin" },
+    { anahtar: "sektor", etiket: "Sektör", tip: "metin" },
+    { anahtar: "adres", etiket: "Merkez Adresi", tip: "metin" },
+    { anahtar: "iletisim", etiket: "Rapor Sorumlusu / İletişim", tip: "metin" },
+    { anahtar: "yil", etiket: "Raporlama Yılı", tip: "sayi" },
+    { anahtar: "donemBas", etiket: "Dönem Başlangıcı", tip: "tarih" },
+    { anahtar: "donemBit", etiket: "Dönem Bitişi", tip: "tarih" },
+    { anahtar: "bazYil", etiket: "Baz Yıl", tip: "sayi" },
+    { anahtar: "ilkRapor", etiket: "İlk TSRS Raporu mu?", tip: "secim" },
+    { anahtar: "sinir", etiket: "Konsolidasyon Yaklaşımı", tip: "secim" },
+    { anahtar: "konsolidasyon", etiket: "Dahil edilen tesisler / iştirakler", tip: "uzun_metin" },
+    { anahtar: "fte", etiket: "Çalışan Sayısı (TZE)", tip: "sayi" },
+    { anahtar: "hasilat", etiket: "Net Hasılat (Bin TL)", tip: "sayi" },
+    { anahtar: "uretim", etiket: "Yıllık Üretim (ton)", tip: "sayi" },
+    { anahtar: "dogrulama", etiket: "Güvence Durumu", tip: "secim" },
+    { anahtar: "dogrulayici", etiket: "Doğrulayıcı Kuruluş", tip: "metin" },
+    { anahtar: "dogrulamaStandart", etiket: "Güvence Standardı", tip: "secim" },
+    { anahtar: "guvenceSeviye", etiket: "Güvence Seviyesi", tip: "secim" },
+    { anahtar: "ticaretSicilNo", etiket: "Ticaret Sicil No", tip: "metin" },
+    { anahtar: "iletisimEposta", etiket: "İletişim E-postası", tip: "metin" },
+    { anahtar: "raporDanismani", etiket: "Raporlama Danışmanı", tip: "metin" },
+    { anahtar: "web", etiket: "Web Sitesi", tip: "metin" },
+    { anahtar: "oncekiK1", etiket: "Önceki Dönem Kapsam 1 (tCO2e)", tip: "sayi" },
+    { anahtar: "oncekiK2", etiket: "Önceki Dönem Kapsam 2 (tCO2e)", tip: "sayi" },
+    { anahtar: "oncekiK3", etiket: "Önceki Dönem Kapsam 3 (tCO2e)", tip: "sayi" },
+    { anahtar: "icKarbonFiyati", etiket: "İç Karbon Fiyatı", tip: "metin" }
+  ];
+
+  /* ---- HEDEF ALAN HARİTASI ----
+     Uygulamanın TÜM doldurulabilir alanlarını ŞEMADAN üretir; elle liste tutulmaz.
+     Döner: [{ yol, etiket, tip, grup, tur:"skaler"|"dizi", dolu, adet? , sutunlar? }] */
+  d.hedefAlanlar = function () {
+    var liste = [];
+    // 1) Profil skalerleri
+    d.HEDEF_PROFIL.forEach(function (a) {
+      liste.push({ yol: "profil." + a.anahtar, etiket: a.etiket, tip: a.tip, grup: "Şirket Profili", tur: "skaler" });
+    });
+    // 2) Modül anlatıları + kayıt tabloları (data/tsrs_modulleri.js)
+    d.modulTanimlari().forEach(function (m) {
+      (m.anlatilar || []).forEach(function (al) {
+        liste.push({
+          yol: "moduller." + m.id + ".anlatilar." + al.anahtar,
+          etiket: al.etiket, tip: al.tip || "uzun_metin", grup: m.baslik, tur: "skaler"
+        });
+      });
+      if (m.tablo) {
+        liste.push({
+          yol: "moduller." + m.id + ".kayitlar", etiket: m.tablo.etiket + " (tablo)",
+          tip: "tablo", grup: m.baslik, tur: "dizi", sutunlar: m.tablo.sutunlar || []
+        });
+      }
+    });
+    // 3) Sektör metrikleri (seçili ciltlerden — data/sektor_ciltleri.js)
+    d.aktifMetrikler().forEach(function (mk) {
+      var alan = (mk.tip === "ta") ? "metin" : "deger";
+      liste.push({
+        yol: "sektorMetrik." + mk.kod + "." + alan, etiket: (mk.kod + " — " + mk.ad),
+        tip: mk.tip, grup: "Sektör Metrikleri", tur: "skaler"
+      });
+    });
+    // 4) Veri dizileri
+    liste.push({ yol: "faaliyet", etiket: "Faaliyet (Kapsam 1 & 3)", tip: "tablo", grup: "Veri Girişi", tur: "dizi" });
+    liste.push({ yol: "elektrik", etiket: "Elektrik (Kapsam 2)", tip: "tablo", grup: "Veri Girişi", tur: "dizi" });
+    liste.push({ yol: "sogutucu", etiket: "Soğutucu / Kaçak Gaz", tip: "tablo", grup: "Veri Girişi", tur: "dizi" });
+    // 5) Doldurulma durumu
+    liste.forEach(function (a) {
+      if (a.tur === "dizi") {
+        var arr = yolOku(d.veri, a.yol);
+        a.adet = Array.isArray(arr) ? arr.length : 0;
+        a.dolu = a.adet > 0;
+      } else {
+        a.dolu = !bosMu(yolOku(d.veri, a.yol));
+      }
+    });
+    return liste;
+  };
+
+  /* ---- BOŞ ALAN MANİFESTOSU ----
+     Açık müşteri için doldurulması gereken TÜM boşlukların listesi.
+     Belge-arama kontrol listesi + "hepsini kapsadık mı" kanıtı. */
+  d.bosAlanOzeti = function () {
+    var h = d.hedefAlanlar();
+    var ozet = { toplam: h.length, dolu: 0, bos: 0, gruplar: {} };
+    h.forEach(function (a) {
+      if (a.dolu) ozet.dolu++; else ozet.bos++;
+      var g = ozet.gruplar[a.grup] || (ozet.gruplar[a.grup] = { toplam: 0, bos: 0 });
+      g.toplam++; if (!a.dolu) g.bos++;
+    });
+    return ozet;
+  };
+  d.bosAlanManifestoIndir = function () {
+    var h = d.hedefAlanlar(), sep = ";";
+    function hucre(v) { v = String(v == null ? "" : v); return (v.indexOf(sep) > -1 || v.indexOf('"') > -1) ? '"' + v.replace(/"/g, '""') + '"' : v; }
+    var satirlar = [["grup", "alan", "yol", "tip", "durum"].join(sep)];
+    h.forEach(function (a) {
+      satirlar.push([hucre(a.grup), hucre(a.etiket), hucre(a.yol), hucre(a.tip),
+        a.tur === "dizi" ? (a.dolu ? a.adet + " kayıt" : "BOŞ") : (a.dolu ? "dolu" : "BOŞ")].join(sep));
+    });
+    var p = d.veri.profil || {};
+    var ad = "bos-alan-manifestosu-" + dosyaSlug(p.unvan) + (p.yil ? "-" + p.yil : "") + ".csv";
+    d.dosyaIndir(ad, "﻿" + satirlar.join("\r\n"), "text/csv");
+  };
+
+  // Dizi kaydı için dedup anahtarı (yeniden yüklemede tekrarı önler)
+  function diziAnahtar(dizi, k) {
+    k = k || {};
+    if (dizi === "faaliyet") return [k.tesis, k.kategori, k.kaynak, k.miktar, k.birim, k.donem].join("|").toLocaleLowerCase("tr");
+    if (dizi === "elektrik") return [k.tesis, k.sebeke, k.kwh, k.donem].join("|").toLocaleLowerCase("tr");
+    if (dizi === "sogutucu") return [k.ekipman, k.gaz, k.donem].join("|").toLocaleLowerCase("tr");
+    return JSON.stringify(k);
+  }
+
+  /* ---- İÇE AKTARIM ANALİZİ (kuru çalıştırma — YAZMAZ) ----
+     Paketi açık müşteriyle karşılaştırır; ne olacağını önizleme için döner.
+     { gecerli, dolacak:[], zatenDolu:[], cakisma:[], eklenecekKayit, dedupAtlanacak, hata } */
+  d.iceAktarimAnaliz = function (paket) {
+    if (typeof paket === "string") paket = guvenliParse(paket, null);
+    var r = { gecerli: false, dolacak: [], zatenDolu: [], cakisma: [], eklenecekKayit: 0, dedupAtlanacak: 0, kaynakBelgeler: [], hata: null };
+    if (!paket || paket.tur !== "KarbonMotoru_IceAktarimPaketi") { r.hata = "Bu dosya bir Karbon Motoru İçe Aktarım Paketi değil."; return r; }
+    r.gecerli = true;
+    r.kaynakBelgeler = paket.kaynakBelgeler || [];
+    (paket.doldur || []).forEach(function (g) {
+      if (!g || !g.yol) return;
+      var mevcut = yolOku(d.veri, g.yol);
+      if (bosMu(mevcut)) r.dolacak.push({ yol: g.yol, deger: g.deger, kaynak: g.kaynak || "", guven: g.guven || "" });
+      else if (String(mevcut).trim() !== String(g.deger).trim()) r.cakisma.push({ yol: g.yol, mevcut: mevcut, yeni: g.deger, kaynak: g.kaynak || "" });
+      else r.zatenDolu.push(g.yol);
+    });
+    ["faaliyet", "elektrik", "sogutucu"].forEach(function (dz) {
+      var mevcutArr = d.veri[dz] || [], gorulen = {};
+      (paket[dz] || []).forEach(function (kayit) {
+        var ak = diziAnahtar(dz, kayit);
+        if (gorulen[ak] || mevcutArr.some(function (x) { return diziAnahtar(dz, x) === ak; })) r.dedupAtlanacak++;
+        else { gorulen[ak] = true; r.eklenecekKayit++; }
+      });
+    });
+    (paket.modulKayit || []).forEach(function () { r.eklenecekKayit++; });
+    return r;
+  };
+
+  /* ---- İÇE AKTARIM UYGULA (yazar) ----
+     opts.cakismaYollari: kullanıcının "üzerine yaz" onayı verdiği yol dizisi (varsayılan yok).
+     Döner: analiz sonucuna benzer gerçekleşme raporu. */
+  d.iceAktarimUygula = function (paket, opts) {
+    opts = opts || {};
+    if (typeof paket === "string") paket = guvenliParse(paket, null);
+    if (!paket || paket.tur !== "KarbonMotoru_IceAktarimPaketi") return { hata: "Geçersiz paket" };
+    var cakismaYaz = {};
+    (opts.cakismaYollari || []).forEach(function (y) { cakismaYaz[y] = true; });
+    var sonuc = { dolduruldu: 0, cakismaYazildi: 0, cakismaAtlandi: 0, zatenDolu: 0, eklenenKayit: 0, dedupAtlanan: 0 };
+    if (!d.veri.kaynaklar) d.veri.kaynaklar = {};
+    var tarih = new Date().toISOString().slice(0, 10);
+    function kaynakYaz(yol, g) { d.veri.kaynaklar[yol] = { kaynak: g.kaynak || "", guven: g.guven || "", tarih: tarih, belge: paket.kaynakBelgeler || [] }; }
+    (paket.doldur || []).forEach(function (g) {
+      if (!g || !g.yol) return;
+      var mevcut = yolOku(d.veri, g.yol);
+      if (bosMu(mevcut)) { yolYaz(d.veri, g.yol, g.deger); kaynakYaz(g.yol, g); sonuc.dolduruldu++; }
+      else if (String(mevcut).trim() !== String(g.deger).trim()) {
+        if (cakismaYaz[g.yol]) { yolYaz(d.veri, g.yol, g.deger); kaynakYaz(g.yol, g); sonuc.cakismaYazildi++; }
+        else sonuc.cakismaAtlandi++;
+      } else sonuc.zatenDolu++;
+    });
+    ["faaliyet", "elektrik", "sogutucu"].forEach(function (dz) {
+      if (!Array.isArray(d.veri[dz])) d.veri[dz] = [];
+      var onek = dz === "faaliyet" ? "F" : dz === "elektrik" ? "E" : "S";
+      (paket[dz] || []).forEach(function (kayit) {
+        var ak = diziAnahtar(dz, kayit);
+        if (d.veri[dz].some(function (x) { return diziAnahtar(dz, x) === ak; })) { sonuc.dedupAtlanan++; return; }
+        if (!kayit.no) kayit.no = d.yeniNo(onek);
+        // Belge dayanağı ayrı alanda (_kaynak); "kaynak" gerçek veri alanıdır (ör. yakıt adı)
+        if (kayit._kaynak) { kayit.aciklama = (kayit.aciklama ? kayit.aciklama + " " : "") + "[Kaynak: " + kayit._kaynak + "]"; delete kayit._kaynak; }
+        d.veri[dz].push(kayit);
+        sonuc.eklenenKayit++;
+      });
+    });
+    (paket.modulKayit || []).forEach(function (mk) {
+      if (!mk || !mk.modul || !mk.kayit) return;
+      var mv = d.modulVeri(mk.modul);
+      if (mk.kayit._kaynak) { mk.kayit.dayanak = "[Kaynak: " + mk.kayit._kaynak + "]"; delete mk.kayit._kaynak; }
+      mv.kayitlar.push(mk.kayit);
+      sonuc.eklenenKayit++;
+    });
+    d.kaydet(true);
+    return sonuc;
+  };
+
   /* ---- FAALİYET DÖKÜMÜ DIŞA AKTARMA (CSV / XLSX) ----
      Tüm faaliyet/soğutucu/elektrik kayıtları kapsam'a göre sınıflandırılmış,
      detaylı kolonlarla. Motor.faaliyetDokumu() veriyi üretir. */
