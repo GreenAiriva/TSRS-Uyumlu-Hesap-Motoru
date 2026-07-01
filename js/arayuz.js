@@ -185,15 +185,20 @@ window.UI = (function () {
       { yol: "sogutucu", ad: "Soğutucu / Kaçak Gazlar",   ikon: "❄", ciz: cizSogutucu, durum: "sogutucu", ref: "Kapsam 1 — IPCC 2006 Cilt 3 Böl. 7" },
       { yol: "elektrik", ad: "Kapsam 2 — Elektrik",       ikon: "⚡", ciz: cizElektrik, durum: "elektrik", ref: "TSRS 2 md. 29(a)(ii)-(iii) — ikili raporlama" },
       { yol: "sektormetrik", ad: "Sektör Metrikleri", ikon: "◈", ciz: cizSektorMetrikleri, durum: "sektormetrik", ref: "TSRS 2 Ek Ciltleri — seçili sektör metrikleri" },
+      { yol: "veriaktarim", ad: "Veri Aktarımı", ikon: "⇄", ciz: cizVeriAktarim, ref: "CSV ile faaliyet içe aktarma • şirket paketi yedek/taşıma" },
       { grup: "TSRS Açıklamaları" }
     ];
     Depo.modulTanimlari().forEach(function (m) {
       R.push({ yol: "modul/" + m.id, ad: m.baslik, ikon: "•", durum: m.id, ref: m.referans,
                ciz: function (k) { cizModul(k, m.id); } });
     });
-    R.push({ grup: "Yönetim" });
-    R.push({ yol: "admin", ad: "Yönetim Paneli", ikon: "⚙", ciz: function (k) { Admin.ciz(k); },
-             ref: "Referans tabloları • listeler • form alanları • yedekleme" });
+    // Yönetim Paneli yalnız yöneticilere görünür (normal kullanıcılar sadece veri girer + rapor alır).
+    // Rota hiç eklenmediği için doğrudan #/admin'e gidilse de UI.ciz panele yönlendirir (çift güvenlik).
+    if (window.Depo && Depo.aktifKullanici && Depo.aktifKullanici.rol === "admin") {
+      R.push({ grup: "Yönetim" });
+      R.push({ yol: "admin", ad: "Yönetim Paneli", ikon: "⚙", ciz: function (k) { Admin.ciz(k); },
+               ref: "Referans tabloları • listeler • form alanları • kullanıcılar • yedekleme" });
+    }
     return R;
   }
 
@@ -616,10 +621,33 @@ window.UI = (function () {
       profilAlan({ anahtar: "hasilat", etiket: "Net Hasılat (Bin " + (Depo.ayar("para_birimi") || "TL") + ")", tip: "sayi", zorunlu: true }),
       profilAlan({ anahtar: "uretim", etiket: "Yıllık Üretim (ton cevher/ürün)", tip: "sayi", yardim: "Madenciliğe özgü yoğunluk göstergesi (isteğe bağlı)" })
     ])]));
-    kok.appendChild(UI.kart("Doğrulama (Güvence)", [el("div", { class: "form-izgara" }, [
-      profilAlan({ anahtar: "dogrulama", etiket: "Güvence Durumu", tip: "secim", liste: "dogrulama_durumu" }),
-      profilAlan({ anahtar: "dogrulayici", etiket: "Doğrulayıcı Kuruluş", tip: "metin" })
-    ])]));
+    kok.appendChild(UI.kart("Doğrulama (Güvence) ve Ek Künye", [
+      el("p", { style: "margin:0 0 12px;font-size:12.5px;color:var(--soluk)" },
+        ["Güvence beyanı ve iletişim künyesi rapor kapağı/künye bölümüne ve içerik indeksine yansır. Doldurulmayan alanlar raporda [VERİ BEKLENİYOR] olarak işaretlenir."]),
+      el("div", { class: "form-izgara" }, [
+        profilAlan({ anahtar: "dogrulama", etiket: "Güvence Durumu", tip: "secim", liste: "dogrulama_durumu" }),
+        profilAlan({ anahtar: "dogrulayici", etiket: "Doğrulayıcı Kuruluş", tip: "metin" }),
+        profilAlan({ anahtar: "dogrulamaStandart", etiket: "Güvence Standardı", tip: "secim",
+          liste: ["ISO 14064-3:2019", "GDS 3000 / GDS 3410", "ISAE 3000 / 3410", "Diğer"], yardim: "Sera gazı doğrulama/güvence standardı" }),
+        profilAlan({ anahtar: "guvenceSeviye", etiket: "Güvence Seviyesi", tip: "secim",
+          liste: ["Makul (reasonable)", "Sınırlı (limited)", "Güvence alınmadı"], yardim: "TSRS 2 md. 29(a) güvence düzeyi" }),
+        profilAlan({ anahtar: "ticaretSicilNo", etiket: "Ticaret Sicil No", tip: "metin" }),
+        profilAlan({ anahtar: "iletisimEposta", etiket: "İletişim E-postası", tip: "metin", yardim: "Rapor sorumlusunun e-postası" }),
+        profilAlan({ anahtar: "raporDanismani", etiket: "Raporlama Danışmanı", tip: "metin", yardim: "Varsa raporu hazırlayan danışman kuruluş" }),
+        profilAlan({ anahtar: "web", etiket: "Web Sitesi", tip: "metin" })
+      ])
+    ]));
+
+    kok.appendChild(UI.kart("Karşılaştırmalı Bilgi ve İç Karbon Fiyatı", [
+      el("p", { style: "margin:0 0 12px;font-size:12.5px;color:var(--soluk)" },
+        ["TSRS 1 md. 70 önceki dönem karşılaştırması ister (ilk uygulama yılında muaf). TSRS 2 md. 29(f) iç karbon fiyatı açıklaması ister — uygulanmıyorsa boş bırakın, rapor 'uygulanmamaktadır' yazar. Bu alanlar rapora ve uyum kontrolüne otomatik yansır."]),
+      el("div", { class: "form-izgara" }, [
+        profilAlan({ anahtar: "oncekiK1", etiket: "Önceki Dönem Kapsam 1 (tCO2e)", tip: "sayi", yardim: "Geçen yılın doğrudan emisyon toplamı" }),
+        profilAlan({ anahtar: "oncekiK2", etiket: "Önceki Dönem Kapsam 2 (tCO2e)", tip: "sayi", yardim: "Geçen yılın enerji dolaylı emisyonu (lokasyona dayalı)" }),
+        profilAlan({ anahtar: "oncekiK3", etiket: "Önceki Dönem Kapsam 3 (tCO2e)", tip: "sayi", yardim: "Geçen yılın diğer dolaylı emisyonu" }),
+        profilAlan({ anahtar: "icKarbonFiyati", etiket: "İç Karbon Fiyatı", tip: "metin", yardim: "örn. 25 ₺/tCO2e — uygulanmıyorsa boş bırakın" })
+      ])
+    ]));
 
     /* TSRS geçiş muafiyetleri — çoklu seçim */
     var secili = Depo.veri.profil.muafiyetler || [];
@@ -996,6 +1024,182 @@ window.UI = (function () {
         bittiginde(v); kapat();
       } }
     ]);
+  }
+
+  /* ============================================================
+     SAYFA: VERİ AKTARIMI (tüm kullanıcılara açık) — CSV içe aktarma + şirket paketi
+     ============================================================ */
+  function cizVeriAktarim(kok) {
+    kok.appendChild(el("div", { class: "bilgi" }, [
+      "Bu sayfadan müşteri verisini toplu içe aktarabilir, yedekleyebilir veya başka bir müşteriye/ortama taşıyabilirsiniz. " +
+      "İşlemler açık olan müşteri üzerinde çalışır ve otomatik kaydedilir."]));
+
+    /* ---- CSV ile Faaliyet İçe Aktarma ---- */
+    var csvGirdi = el("input", { type: "file", accept: ".csv,text/csv", style: "font:inherit;font-size:13px" });
+    var csvSonuc = el("div", { style: "margin-top:10px" });
+    csvGirdi.addEventListener("change", function () {
+      var f = csvGirdi.files[0];
+      if (!f) return;
+      var okuyucu = new FileReader();
+      okuyucu.onload = function () {
+        var r = Depo.csvFaaliyetIceAktar(String(okuyucu.result));
+        csvSonuc.innerHTML = "";
+        if (r.hatalar.length) {
+          csvSonuc.appendChild(el("div", { class: "bilgi", style: "border-left-color:var(--oksit)" },
+            ["İçe aktarım yapılamadı: " + UI.kacir(r.hatalar.join(" • "))]));
+        } else {
+          csvSonuc.appendChild(el("div", { class: "bilgi yesil" },
+            [el("b", null, [r.eklenen + " faaliyet kaydı eklendi"]),
+             r.atlanan ? " • " + r.atlanan + " satır atlandı (eksik/geçersiz veri)" : "",
+             ". Faaliyet Verisi sayfasından kaynak/birim eşleştirmesini tamamlayabilirsiniz."]));
+          UI.bildir(r.eklenen + " kayıt içe aktarıldı");
+        }
+        csvGirdi.value = "";
+      };
+      okuyucu.readAsText(f, "utf-8");
+    });
+    kok.appendChild(UI.kart("CSV ile Faaliyet İçe Aktarma", [
+      el("p", { style: "margin:0 0 10px;font-size:13px" },
+        ["Müşteriden gelen faaliyet verisini CSV dosyasından toplu yükleyin. Başlık satırı esnek eşlenir; " +
+         "en az “kategori” ve “miktar” sütunları bulunmalıdır. Türkçe sayı biçimi (1.234,56) ve hem virgül hem noktalı virgül ayırıcı desteklenir."]),
+      el("div", { class: "bilgi", style: "font-size:12px;margin-bottom:10px" },
+        ["Tanınan başlıklar: tesis, kategori, kaynak, miktar, birim, donem, aciklama. Örnek: ",
+         el("code", null, ["tesis;kategori;kaynak;miktar;birim;donem"])]),
+      csvGirdi, csvSonuc
+    ]));
+
+    /* ---- Şirket Veri Paketi (yedek / taşıma) ---- */
+    var paketGirdi = el("input", { type: "file", accept: ".json,application/json", style: "font:inherit;font-size:13px" });
+    paketGirdi.addEventListener("change", function () {
+      var f = paketGirdi.files[0];
+      if (!f) return;
+      var okuyucu = new FileReader();
+      okuyucu.onload = function () {
+        UI.onayla("Şirket paketi yüklenince açık müşterinin verisi (profil, faaliyet, metrikler) bu dosyadakilerle DEĞİŞTİRİLİR. Devam edilsin mi?", function () {
+          var hata = Depo.sirketPaketiYukle(String(okuyucu.result));
+          if (hata) UI.bildir(hata, true);
+          else { UI.bildir("Şirket paketi yüklendi"); UI.ciz(); }
+        });
+      };
+      okuyucu.readAsText(f, "utf-8");
+    });
+    kok.appendChild(UI.kart("Şirket Veri Paketi (yedek / taşıma)", [
+      el("p", { style: "margin:0 0 12px;font-size:13px" },
+        ["Açık müşterinin tüm verisini (profil + faaliyet + soğutucu + elektrik + TSRS modülleri + sektör metrikleri) tek JSON dosyasına " +
+         "indirir. Yedekleme, arşivleme veya başka bir ortama taşıma için idealdir. Ortak emisyon faktörü tabloları dahil edilmez."]),
+      el("div", { style: "display:flex;gap:10px;flex-wrap:wrap;align-items:center" }, [
+        el("button", { class: "btn birincil", type: "button", onclick: function () {
+          Depo.sirketPaketiAl(); UI.bildir("Şirket paketi indiriliyor");
+        } }, ["⬇ Şirket Paketini İndir"]),
+        el("span", { style: "font-size:12.5px;color:var(--soluk)" }, ["veya yükle:"]),
+        paketGirdi
+      ])
+    ], { kapsam: "k1" }));
+
+    /* ---- Boş Alan Manifestosu (kapsam kontrolü) ---- */
+    (function () {
+      var ozet = Depo.bosAlanOzeti();
+      var satirlar = Object.keys(ozet.gruplar).map(function (g) {
+        var x = ozet.gruplar[g];
+        return el("tr", null, [
+          el("td", { style: "padding:3px 8px" }, [g]),
+          el("td", { style: "padding:3px 8px;text-align:right" }, [String(x.toplam)]),
+          el("td", { style: "padding:3px 8px;text-align:right;font-weight:600;color:" + (x.bos ? "var(--oksit)" : "var(--soluk)") }, [String(x.bos)])
+        ]);
+      });
+      kok.appendChild(UI.kart("Boş Alan Manifestosu (kapsam kontrolü)", [
+        el("p", { style: "margin:0 0 10px;font-size:13px" },
+          ["Bu müşteri için uygulamadaki TÜM doldurulabilir alanların (profil, 10 TSRS modülü, sektör metrikleri, veri dizileri) doldurulma durumu. " +
+           "Belgelerden hangi bilgileri çıkarmamız gerektiğinin tam listesi ve “hepsini kapsadık mı” kontrolüdür."]),
+        el("div", { class: "bilgi", style: "margin-bottom:10px" }, [
+          el("b", null, [String(ozet.toplam)]), " hedef alan • ",
+          el("b", { style: "color:var(--soluk)" }, [String(ozet.dolu) + " dolu"]), " • ",
+          el("b", { style: "color:var(--oksit)" }, [String(ozet.bos) + " boş"])
+        ]),
+        el("div", { style: "overflow:auto;max-height:260px;border:1px solid var(--cizgi,#e0e0e0);border-radius:6px;margin-bottom:12px" }, [
+          el("table", { style: "width:100%;border-collapse:collapse;font-size:12.5px" }, [
+            el("thead", null, [el("tr", { style: "position:sticky;top:0;background:var(--yuzey,#fafafa)" }, [
+              el("th", { style: "padding:5px 8px;text-align:left" }, ["Bölüm"]),
+              el("th", { style: "padding:5px 8px;text-align:right" }, ["Alan"]),
+              el("th", { style: "padding:5px 8px;text-align:right" }, ["Boş"])
+            ])]),
+            el("tbody", null, satirlar)
+          ])
+        ]),
+        el("button", { class: "btn", type: "button", onclick: function () {
+          Depo.bosAlanManifestoIndir(); UI.bildir("Boş alan manifestosu indiriliyor");
+        } }, ["⬇ Boş Alan Manifestosunu İndir (CSV)"])
+      ]));
+    })();
+
+    /* ---- Belgeden Çıkarılan Paketi Yükle (yalnız boş doldur) ---- */
+    var ipGirdi = el("input", { type: "file", accept: ".json,application/json", style: "font:inherit;font-size:13px" });
+    var ipOnizleme = el("div", { style: "margin-top:12px" });
+    function ipOnizlemeCiz(paket, a) {
+      ipOnizleme.innerHTML = "";
+      var cakismaSecim = {};
+      ipOnizleme.appendChild(el("div", { class: "bilgi" }, [
+        el("b", null, [a.dolacak.length + " boş alan dolacak"]), " • " + a.zatenDolu.length + " zaten dolu (atlanır) • ",
+        el("b", { style: a.cakisma.length ? "color:var(--oksit)" : "" }, [a.cakisma.length + " çakışma"]), " • ",
+        el("b", null, [a.eklenecekKayit + " kayıt eklenecek"]), (a.dedupAtlanacak ? " • " + a.dedupAtlanacak + " tekrar atlanacak" : ""),
+        a.kaynakBelgeler.length ? el("div", { style: "margin-top:6px;font-size:12px;color:var(--soluk)" }, ["Kaynak belgeler: " + a.kaynakBelgeler.join(", ")]) : ""
+      ]));
+      if (a.dolacak.length) {
+        ipOnizleme.appendChild(el("div", { style: "font-weight:600;margin:10px 0 4px;font-size:13px" }, ["Dolacak boş alanlar:"]));
+        ipOnizleme.appendChild(el("div", { style: "max-height:200px;overflow:auto;font-size:12px;border:1px solid var(--cizgi,#e0e0e0);border-radius:6px;padding:6px" },
+          a.dolacak.map(function (x) {
+            return el("div", { style: "padding:3px 0" }, [
+              el("code", { style: "color:var(--vurgu,#1565c0)" }, [x.yol]), ": ", UI.kisalt(String(x.deger), 90),
+              x.kaynak ? el("span", { style: "color:var(--soluk)" }, [" — " + x.kaynak]) : ""
+            ]);
+          })));
+      }
+      if (a.cakisma.length) {
+        ipOnizleme.appendChild(el("div", { style: "font-weight:600;margin:12px 0 4px;font-size:13px;color:var(--oksit)" },
+          ["Çakışmalar — mevcut veri KORUNUR; üzerine yazmak isterseniz işaretleyin:"]));
+        a.cakisma.forEach(function (c) {
+          var cb = el("input", { type: "checkbox", style: "margin-right:6px" });
+          cb.addEventListener("change", function () { cakismaSecim[c.yol] = cb.checked; });
+          ipOnizleme.appendChild(el("label", { style: "display:block;font-size:12px;padding:4px 0;cursor:pointer" }, [
+            cb, el("code", { style: "color:var(--vurgu,#1565c0)" }, [c.yol]),
+            el("div", { style: "margin-left:22px;color:var(--soluk)" }, ["Mevcut: " + UI.kisalt(String(c.mevcut), 60) + "  →  Yeni: " + UI.kisalt(String(c.yeni), 60)])
+          ]));
+        });
+      }
+      var uygulaBtn = el("button", { class: "btn birincil", type: "button", style: "margin-top:12px" }, ["✓ Boşları Doldur ve Kayıtları Ekle"]);
+      uygulaBtn.addEventListener("click", function () {
+        var yollar = Object.keys(cakismaSecim).filter(function (y) { return cakismaSecim[y]; });
+        UI.onayla(a.dolacak.length + " boş alan doldurulacak, " + a.eklenecekKayit + " kayıt eklenecek" +
+          (yollar.length ? ", " + yollar.length + " dolu alanın ÜZERİNE YAZILACAK" : "") +
+          ". İşaretlenmeyen dolu veriler korunur. Devam edilsin mi?", function () {
+          var s = Depo.iceAktarimUygula(paket, { cakismaYollari: yollar });
+          UI.bildir(s.dolduruldu + " alan dolduruldu, " + s.eklenenKayit + " kayıt eklendi");
+          UI.ciz();
+        });
+      });
+      ipOnizleme.appendChild(uygulaBtn);
+    }
+    ipGirdi.addEventListener("change", function () {
+      var f = ipGirdi.files[0]; if (!f) return;
+      var okuyucu = new FileReader();
+      okuyucu.onload = function () {
+        var paket = null;
+        try { paket = JSON.parse(String(okuyucu.result)); } catch (e) {}
+        var a = Depo.iceAktarimAnaliz(paket);
+        ipOnizleme.innerHTML = "";
+        if (a.hata) ipOnizleme.appendChild(el("div", { class: "bilgi", style: "border-left-color:var(--oksit)" }, [UI.kacir(a.hata)]));
+        else ipOnizlemeCiz(paket, a);
+        ipGirdi.value = "";
+      };
+      okuyucu.readAsText(f, "utf-8");
+    });
+    kok.appendChild(UI.kart("Belgeden Çıkarılan Paketi Yükle (yalnız boş doldur)", [
+      el("p", { style: "margin:0 0 10px;font-size:13px" },
+        ["Yerelde belgelerden (PDF/Excel/MD) çıkarılıp hazırlanan “İçe Aktarım Paketi” JSON dosyasını yükleyin. " +
+         "Yalnızca BOŞ alanları doldurur, mevcut verilerinizi EZMEZ; faaliyet/elektrik/soğutucu kayıtlarını tekrarsız ekler; " +
+         "her değerin belge kaynağını (denetlenebilirlik için) saklar. Yükleme öncesi ne olacağını önizlersiniz."]),
+      ipGirdi, ipOnizleme
+    ], { kapsam: "k3" }));
   }
 
   function cizFaaliyet(kok) {

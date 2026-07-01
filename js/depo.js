@@ -37,77 +37,234 @@ window.Depo = (function () {
     catch (e) { return varsayilan; }
   }
 
-  d.yukle = function () {
-    var ham = null;
-    try { ham = localStorage.getItem(ANAHTAR_VERI); } catch (e) {}
-    if (ham) {
-      var v = guvenliParse(ham, null);
-      if (v && typeof v === "object") {
-        d.veri = Object.assign(bosVeri(), v);
-      }
-    }
-    var hamRef = null;
-    try { hamRef = localStorage.getItem(ANAHTAR_REF); } catch (e) {}
-    if (hamRef) {
-      var r = guvenliParse(hamRef, {});
-      d.refOzel        = r.ref      || {};
-      d.ayarOzel       = r.ayar     || {};
-      d.listeOzel      = r.liste    || {};
-      d.modulTanimOzel = r.modulTanim || null;
-    }
+  /* ============================================================
+     BULUT IO (Supabase) — localStorage yerine
+     d.veri RAM'de senkron tutulur; yalnız yükle/kaydet ağ üzerinden async olur.
+     Mevcut çağıranlar (UI/admin) imzaları aynı kaldığı için etkilenmez.
+     ============================================================ */
+  d.aktifMusteriId = null;     // o an açık müşteri (customers.id)
+  d.aktifKullanici = null;     // giriş yapan profil { id, email, rol, onayli }
+  d.surumNo = 0;               // iyimser kilit sürüm numarası
+  d._sonKayit = null;          // en son kaydedilen verinin kopyası (diff/undo için)
+  d._konfigYuklendi = false;
+  d._kayitBekliyor = false;    // debounce kuyruğunda kayıt var mı
+  d._kayitUcuyor = false;      // ağ kaydı sürüyor mu
+
+  function derinKopya(x) { return JSON.parse(JSON.stringify(x)); }
+
+  // Global referans/ayar düzenlemeleri (app_config — tek satır). Bir kez yüklenir.
+  d.konfigYukle = function () {
+    if (!window.SB) return Promise.resolve();
+    return SB.from("app_config").select("ref_ozel, ayar_ozel, liste_ozel, modul_tanim").eq("id", 1).single()
+      .then(function (q) {
+        if (!q.error && q.data) {
+          d.refOzel        = q.data.ref_ozel   || {};
+          d.ayarOzel       = q.data.ayar_ozel  || {};
+          d.listeOzel      = q.data.liste_ozel || {};
+          d.modulTanimOzel = q.data.modul_tanim || null;
+        }
+        d._konfigYuklendi = true;
+      })["catch"](function () { d._konfigYuklendi = true; });
   };
 
+  // Müşteri verisini yükle. Argümansız çağrı (UI.basla'nın eski senkron çağrısı) no-op'tur.
+  d.yukle = function (musteriId) {
+    if (musteriId == null) return Promise.resolve();   // veri zaten bellekte
+    if (!window.SB) return Promise.reject(new Error("Bulut bağlantısı yok"));
+    var on = d._konfigYuklendi ? Promise.resolve() : d.konfigYukle();
+    return on.then(function () {
+      return SB.from("customers").select("data, surum_no").eq("id", musteriId).single();
+    }).then(function (q) {
+      if (q.error) throw q.error;
+      d.veri = Object.assign(bosVeri(), q.data.data || {});
+      d.aktifMusteriId = musteriId;
+      d.surumNo = q.data.surum_no || 0;
+      d._sonKayit = derinKopya(d.veri);
+    });
+  };
+
+  /* ---- Otomatik kayıt (debounce) + sürüm geçmişi (geri al) ---- */
   var kayitZamanlayici = null;
+  function ozetUret(patch) {
+    var etiket = {
+      profil: "Şirket profili", faaliyet: "Faaliyet verisi", sogutucu: "Soğutucu/kaçak",
+      elektrik: "Kapsam 2 elektrik", moduller: "TSRS açıklamaları", sektorMetrik: "Sektör metrikleri"
+    };
+    var kokler = {};
+    (patch || []).forEach(function (op) {
+      var kk = String(op.path || "").split("/")[1];
+      if (kk) kokler[kk] = true;
+    });
+    var adlar = Object.keys(kokler).map(function (kk) { return etiket[kk] || kk; });
+    return adlar.length ? adlar.join(", ") + " değişti" : "Güncelleme";
+  }
+
   d.kaydet = function (sessiz) {
+    if (!d.aktifMusteriId) return;        // müşteri seçilmeden kayıt olmaz
+    d._kayitBekliyor = true;
     clearTimeout(kayitZamanlayici);
-    kayitZamanlayici = setTimeout(function () {
-      try {
-        localStorage.setItem(ANAHTAR_VERI, JSON.stringify(d.veri));
-        localStorage.setItem(ANAHTAR_REF, JSON.stringify({
-          ref: d.refOzel, ayar: d.ayarOzel, liste: d.listeOzel, modulTanim: d.modulTanimOzel
-        }));
-        // Yedeklenmemiş değişiklik takibi: her gerçek kayıtta değişim anını güncelle
-        try { localStorage.setItem(ANAHTAR_DEGISIM_ZAMAN, new Date().toISOString()); } catch (e2) {}
-        if (!sessiz && window.UI) UI.bildir("Kaydedildi");
-      } catch (e) {
-        if (window.UI) UI.bildir("Kaydetme hatası: tarayıcı depolaması kullanılamıyor", true);
-      }
-    }, 250);
+    kayitZamanlayici = setTimeout(function () { d._flush(sessiz); }, 350);
   };
 
-  /* ---- Yedeklenmemiş değişiklik takibi (otomatik hatırlatma + çıkış uyarısı için) ----
-     sonDegisim > sonYedek  ⇒  yedeklenmemiş değişiklik var. */
-  d.sonYedekZamani = function () {
-    try { return localStorage.getItem(ANAHTAR_YEDEK_ZAMAN) || null; } catch (e) { return null; }
+  d._flush = function (sessiz) {
+    if (!d.aktifMusteriId || !window.SB) { d._kayitBekliyor = false; return Promise.resolve(); }
+    // Önceki kayıt hâlâ ağdaysa eşzamanlı yazma yapma; kısa süre sonra yeniden dene
+    if (d._kayitUcuyor) {
+      d._kayitBekliyor = true;
+      clearTimeout(kayitZamanlayici);
+      kayitZamanlayici = setTimeout(function () { d._flush(sessiz); }, 200);
+      return Promise.resolve();
+    }
+    var yeni = d.veri, eski = d._sonKayit || {};
+    var patch = null;
+    if (window.jsonpatch) {
+      try { patch = jsonpatch.compare(yeni, eski); } catch (e) { patch = null; }   // yeni→eski = ters patch (undo)
+      if (patch && patch.length === 0) { d._kayitBekliyor = false; return Promise.resolve(); }
+    }
+    d._kayitBekliyor = false; d._kayitUcuyor = true;
+    var yeniSurum = d.surumNo + 1;
+    var gonder = derinKopya(yeni);
+    return SB.from("customers").update({ data: gonder, surum_no: yeniSurum })
+      .eq("id", d.aktifMusteriId).eq("surum_no", d.surumNo).select("surum_no")
+      .then(function (upd) {
+        if (upd.error) throw upd.error;
+        if (!upd.data || !upd.data.length) {
+          d._kayitUcuyor = false;
+          if (window.UI) UI.bildir("Bu müşteriyi başka bir kullanıcı değiştirdi. Sayfayı yenileyip tekrar deneyin.", true);
+          return;
+        }
+        d.surumNo = yeniSurum;
+        d._sonKayit = gonder;
+        d._kayitUcuyor = false;
+        if (!sessiz && window.UI) UI.bildir("Kaydedildi");
+        if (patch && patch.length && window.jsonpatch) {
+          SB.from("customer_versions").insert({
+            customer_id: d.aktifMusteriId, surum_no: yeniSurum, ters_patch: patch, ozet: ozetUret(patch)
+          }).then(function () {
+            if (yeniSurum > 50) {
+              SB.from("customer_versions").delete()
+                .eq("customer_id", d.aktifMusteriId).lte("surum_no", yeniSurum - 50);
+            }
+          });
+        }
+      })["catch"](function (e) {
+        d._kayitUcuyor = false;
+        if (window.UI) UI.bildir("Kayıt hatası: " + (e.message || e), true);
+      });
   };
-  d.sonDegisimZamani = function () {
-    try { return localStorage.getItem(ANAHTAR_DEGISIM_ZAMAN) || null; } catch (e) { return null; }
+
+  /* ---- Geri Al (son sürüme dönüş — ters JSON Patch uygulanır) ---- */
+  d.geriAl = function () {
+    if (!d.aktifMusteriId || !window.SB) return Promise.resolve("Bağlantı yok");
+    if (!window.jsonpatch) return Promise.resolve("Geri alma kütüphanesi yüklenmedi");
+    var on = Promise.resolve();
+    if (d._kayitBekliyor) { clearTimeout(kayitZamanlayici); on = d._flush(true); }
+    return on.then(function () {
+      return SB.from("customer_versions").select("id, ters_patch")
+        .eq("customer_id", d.aktifMusteriId).order("surum_no", { ascending: false }).limit(1);
+    }).then(function (q) {
+      if (q.error) return q.error.message;
+      if (!q.data || !q.data.length) return "Geri alınacak işlem yok";
+      var v = q.data[0], oncekiHal;
+      try { oncekiHal = jsonpatch.applyPatch(derinKopya(d.veri), v.ters_patch).newDocument; }
+      catch (e) { return "Geri alma uygulanamadı"; }
+      var yeniSurum = d.surumNo + 1;
+      return SB.from("customers").update({ data: oncekiHal, surum_no: yeniSurum })
+        .eq("id", d.aktifMusteriId).eq("surum_no", d.surumNo).select("surum_no")
+        .then(function (upd) {
+          if (upd.error) return upd.error.message;
+          if (!upd.data || !upd.data.length) return "Çakışma: başka kullanıcı değiştirdi, sayfayı yenileyin";
+          return SB.from("customer_versions").delete().eq("id", v.id).then(function () {
+            d.surumNo = yeniSurum;
+            d.veri = Object.assign(bosVeri(), oncekiHal);
+            d._sonKayit = derinKopya(d.veri);
+            return null;   // başarı
+          });
+        });
+    });
   };
-  d.yedekZamaniniIsaretle = function () {
-    try { localStorage.setItem(ANAHTAR_YEDEK_ZAMAN, new Date().toISOString()); } catch (e) {}
+
+  /* ---- Müşteri (şirket) yönetimi ---- */
+  d.musteriListele = function () {
+    if (!window.SB) return Promise.resolve([]);
+    return SB.from("customers").select("id, unvan, nace, yil, updated_at").order("updated_at", { ascending: false })
+      .then(function (q) {
+        if (q.error) { if (window.UI) UI.bildir("Müşteri listesi alınamadı: " + q.error.message, true); return []; }
+        return q.data || [];
+      });
   };
-  // Son yedekten bu yana kaydedilmiş (yedeklenmemiş) değişiklik var mı?
-  d.yedeklenmemisDegisiklikVar = function () {
-    var sd = d.sonDegisimZamani();
-    if (!sd) return false;                 // hiç değişiklik yoksa uyarma
-    var sy = d.sonYedekZamani();
-    if (!sy) return true;                  // hiç yedek alınmamışsa ve değişiklik varsa: evet
-    return new Date(sd).getTime() > new Date(sy).getTime();
+  d.musteriOlustur = function (unvan, opts) {
+    opts = opts || {};
+    if (!window.SB) return Promise.resolve({ hata: "Bağlantı yok" });
+    var veri = Object.assign(bosVeri(), { profil: { unvan: unvan, yil: opts.yil || "", nace: opts.nace || "" } });
+    return SB.from("customers").insert({ unvan: unvan, nace: opts.nace || null, yil: opts.yil || null, data: veri })
+      .select("id").single()
+      .then(function (q) { return q.error ? { hata: q.error.message } : { id: q.data.id }; });
   };
-  // Son yedekten bu yana geçen gün sayısı (yedek hiç yoksa null)
-  d.sonYedektenBuyanaGun = function () {
-    var sy = d.sonYedekZamani();
-    if (!sy) return null;
-    return (Date.now() - new Date(sy).getTime()) / 86400000;
+  d.musteriSil = function (id) {
+    if (!window.SB) return Promise.resolve("Bağlantı yok");
+    return SB.from("customers").delete().eq("id", id).then(function (q) { return q.error ? q.error.message : null; });
   };
+  d.musteriKapat = function () {
+    d.izlemeyiBirak();
+    d.aktifMusteriId = null; d.veri = bosVeri(); d.surumNo = 0; d._sonKayit = null;
+  };
+
+  /* ---- Gerçek zamanlı izleme (eşzamanlı düzenleme farkındalığı) ----
+     Açık müşterinin satırı başka bir kullanıcı tarafından güncellenirse geriCagir(surum) tetiklenir. */
+  d._kanal = null;
+  d.gercekZamanliIzle = function (musteriId, geriCagir) {
+    if (!window.SB || !SB.channel) return;
+    d.izlemeyiBirak();
+    d._kanal = SB.channel("musteri-" + musteriId)
+      .on("postgres_changes",
+        { event: "UPDATE", schema: "public", table: "customers", filter: "id=eq." + musteriId },
+        function (payload) {
+          var yeni = payload.new || {};
+          if (yeni.surum_no > d.surumNo && yeni.updated_by &&
+              (!d.aktifKullanici || yeni.updated_by !== d.aktifKullanici.id)) {
+            if (typeof geriCagir === "function") geriCagir(yeni.surum_no);
+          }
+        })
+      .subscribe();
+  };
+  d.izlemeyiBirak = function () {
+    if (d._kanal && window.SB && SB.removeChannel) { try { SB.removeChannel(d._kanal); } catch (e) {} }
+    d._kanal = null;
+  };
+
+  /* ---- Global konfig (app_config) kaydı — RLS gereği yalnız admin yazabilir ---- */
+  var konfigZamanlayici = null;
+  d.konfigKaydet = function () {
+    clearTimeout(konfigZamanlayici);
+    konfigZamanlayici = setTimeout(function () {
+      if (!window.SB) return;
+      SB.from("app_config").update({
+        ref_ozel: d.refOzel, ayar_ozel: d.ayarOzel, liste_ozel: d.listeOzel,
+        modul_tanim: d.modulTanimOzel, updated_at: new Date().toISOString()
+      }).eq("id", 1).select("id").then(function (q) {
+        if (q.error) { if (window.UI) UI.bildir("Ayar kaydedilemedi (yönetici gerekir): " + q.error.message, true); }
+        else if (window.UI) UI.bildir("Referans/ayar kaydedildi");
+      });
+    }, 350);
+  };
+
+  /* ---- Yedek/değişiklik takibi (bulut modelinde sadeleştirildi) ----
+     Veri buluta otomatik kaydedildiği için yerel "yedek alın" hatırlatması susar;
+     çıkış uyarısı yalnızca devam eden/bekleyen bir kayıt varsa devreye girer. */
+  d.sonYedekZamani = function () { return null; };
+  d.sonDegisimZamani = function () { return null; };
+  d.yedekZamaniniIsaretle = function () {};
+  d.yedeklenmemisDegisiklikVar = function () { return !!(d._kayitBekliyor || d._kayitUcuyor); };
+  d.sonYedektenBuyanaGun = function () { return null; };
 
   /* ---- Veri setleri (referans tabloları) ---- */
   d.set = function (ad) {
     if (d.refOzel[ad]) return d.refOzel[ad];
     return (window.VERI && VERI[ad]) ? VERI[ad] : [];
   };
-  d.setKaydet = function (ad, satirlar) { d.refOzel[ad] = satirlar; d.kaydet(); };
-  d.setVarsayilan = function (ad) { delete d.refOzel[ad]; d.kaydet(); };
+  d.setKaydet = function (ad, satirlar) { d.refOzel[ad] = satirlar; d.konfigKaydet(); };
+  d.setVarsayilan = function (ad) { delete d.refOzel[ad]; d.konfigKaydet(); };
   d.setDegistiMi = function (ad) { return !!d.refOzel[ad]; };
 
   /* ---- Listeler ---- */
@@ -290,21 +447,20 @@ window.Depo = (function () {
     var p = guvenliParse(metin, null);
     if (!p || p.tur !== "KarbonMotoru_Yedek") return "Bu dosya bir Karbon Motoru yedeği değil.";
     d.veri = Object.assign(bosVeri(), p.veri || {});
-    d.refOzel = p.ref || {}; d.ayarOzel = p.ayar || {};
-    d.listeOzel = p.liste || {}; d.modulTanimOzel = p.modulTanim || null;
-    d.kaydet(true);
+    d.kaydet(true);   // müşteri verisini buluta yaz
+    // Referans/ayar düzenlemeleri yalnız yönetici hesabında app_config'e yazılabilir
+    if (p.ref || p.ayar || p.liste || p.modulTanim) {
+      d.refOzel = p.ref || {}; d.ayarOzel = p.ayar || {};
+      d.listeOzel = p.liste || {}; d.modulTanimOzel = p.modulTanim || null;
+      if (d.aktifKullanici && d.aktifKullanici.rol === "admin") d.konfigKaydet();
+    }
     return null;
   };
   d.sifirla = function (neler) {
-    if (neler === "girdiler" || neler === "hepsi") d.veri = bosVeri();
+    if (neler === "girdiler" || neler === "hepsi") { d.veri = bosVeri(); d._sonKayit = null; d.kaydet(true); }
     if (neler === "referans" || neler === "hepsi") {
-      d.refOzel = {}; d.ayarOzel = {}; d.listeOzel = {}; d.modulTanimOzel = null;
+      d.refOzel = {}; d.ayarOzel = {}; d.listeOzel = {}; d.modulTanimOzel = null; d.konfigKaydet();
     }
-    if (neler === "hepsi") {
-      // Yedek/değişim zaman damgalarını da temizle (yanlış çıkış uyarısı çıkmasın)
-      try { localStorage.removeItem(ANAHTAR_YEDEK_ZAMAN); localStorage.removeItem(ANAHTAR_DEGISIM_ZAMAN); } catch (e) {}
-    }
-    d.kaydet(true);
   };
 
   /* ---- Dosya indirme yardımcıları ---- */
@@ -408,6 +564,285 @@ window.Depo = (function () {
     }
     if (sonuc.eklenen) d.kaydet(true);
     return sonuc;
+  };
+
+  /* ============================================================
+     BELGEDEN İÇE AKTARIM — "yalnız boş doldur" + kaynak izi
+     ------------------------------------------------------------
+     Dağınık müşteri belgeleri (PDF/Excel/MD) yerelde parse edilip
+     "birleşik içe aktarım paketi" (tur: KarbonMotoru_IceAktarimPaketi)
+     olarak üretilir. Bu paket açık müşteriye:
+       • skaler alanları YALNIZ BOŞSA doldurur (mevcut veriyi ezmez),
+       • faaliyet/elektrik/soğutucu ve modül kayıtlarını dedup ile EKLER,
+       • her doldurulan alanın kaynağını d.veri.kaynaklar[yol]'da izler.
+     Ham belge DB'ye GİRMEZ; yalnız yapılandırılmış paket girer.
+     ============================================================ */
+
+  // Bir değer "boş" mu? (undefined/null/boş metin/boş dizi/boş nesne)
+  function bosMu(v) {
+    if (v == null) return true;
+    if (typeof v === "string") return v.trim() === "";
+    if (Array.isArray(v)) return v.length === 0;
+    if (typeof v === "object") return Object.keys(v).length === 0;
+    return false;
+  }
+  // Nokta-yol ile oku: yolOku(obj, "profil.nace")
+  function yolOku(kok, yol) {
+    var p = String(yol).split("."), o = kok;
+    for (var i = 0; i < p.length; i++) { if (o == null) return undefined; o = o[p[i]]; }
+    return o;
+  }
+  // Nokta-yol ile yaz (ara nesneleri oluşturur): yolYaz(obj, "sektorMetrik.EM-MM-110a.1.deger", v)
+  function yolYaz(kok, yol, deger) {
+    var p = String(yol).split("."), o = kok;
+    for (var i = 0; i < p.length - 1; i++) {
+      if (o[p[i]] == null || typeof o[p[i]] !== "object") o[p[i]] = {};
+      o = o[p[i]];
+    }
+    o[p[p.length - 1]] = deger;
+  }
+
+  /* ---- Profil (künye) skaler alan kataloğu ----
+     KAYNAK: arayuz.js cizProfil formu. Form alanı eklerseniz buraya da ekleyin
+     (modüller ve sektör metrikleri şemadan otomatik gelir; profil formu satır-içi
+     olduğundan burada elle tutulur). */
+  d.HEDEF_PROFIL = [
+    { anahtar: "unvan", etiket: "Ticari Unvan", tip: "metin" },
+    { anahtar: "vergiNo", etiket: "Vergi / MERSİS No", tip: "metin" },
+    { anahtar: "nace", etiket: "NACE Kodu", tip: "metin" },
+    { anahtar: "sektor", etiket: "Sektör", tip: "metin" },
+    { anahtar: "adres", etiket: "Merkez Adresi", tip: "metin" },
+    { anahtar: "iletisim", etiket: "Rapor Sorumlusu / İletişim", tip: "metin" },
+    { anahtar: "yil", etiket: "Raporlama Yılı", tip: "sayi" },
+    { anahtar: "donemBas", etiket: "Dönem Başlangıcı", tip: "tarih" },
+    { anahtar: "donemBit", etiket: "Dönem Bitişi", tip: "tarih" },
+    { anahtar: "bazYil", etiket: "Baz Yıl", tip: "sayi" },
+    { anahtar: "ilkRapor", etiket: "İlk TSRS Raporu mu?", tip: "secim" },
+    { anahtar: "sinir", etiket: "Konsolidasyon Yaklaşımı", tip: "secim" },
+    { anahtar: "konsolidasyon", etiket: "Dahil edilen tesisler / iştirakler", tip: "uzun_metin" },
+    { anahtar: "fte", etiket: "Çalışan Sayısı (TZE)", tip: "sayi" },
+    { anahtar: "hasilat", etiket: "Net Hasılat (Bin TL)", tip: "sayi" },
+    { anahtar: "uretim", etiket: "Yıllık Üretim (ton)", tip: "sayi" },
+    { anahtar: "dogrulama", etiket: "Güvence Durumu", tip: "secim" },
+    { anahtar: "dogrulayici", etiket: "Doğrulayıcı Kuruluş", tip: "metin" },
+    { anahtar: "dogrulamaStandart", etiket: "Güvence Standardı", tip: "secim" },
+    { anahtar: "guvenceSeviye", etiket: "Güvence Seviyesi", tip: "secim" },
+    { anahtar: "ticaretSicilNo", etiket: "Ticaret Sicil No", tip: "metin" },
+    { anahtar: "iletisimEposta", etiket: "İletişim E-postası", tip: "metin" },
+    { anahtar: "raporDanismani", etiket: "Raporlama Danışmanı", tip: "metin" },
+    { anahtar: "web", etiket: "Web Sitesi", tip: "metin" },
+    { anahtar: "oncekiK1", etiket: "Önceki Dönem Kapsam 1 (tCO2e)", tip: "sayi" },
+    { anahtar: "oncekiK2", etiket: "Önceki Dönem Kapsam 2 (tCO2e)", tip: "sayi" },
+    { anahtar: "oncekiK3", etiket: "Önceki Dönem Kapsam 3 (tCO2e)", tip: "sayi" },
+    { anahtar: "icKarbonFiyati", etiket: "İç Karbon Fiyatı", tip: "metin" }
+  ];
+
+  /* ---- HEDEF ALAN HARİTASI ----
+     Uygulamanın TÜM doldurulabilir alanlarını ŞEMADAN üretir; elle liste tutulmaz.
+     Döner: [{ yol, etiket, tip, grup, tur:"skaler"|"dizi", dolu, adet? , sutunlar? }] */
+  d.hedefAlanlar = function () {
+    var liste = [];
+    // 1) Profil skalerleri
+    d.HEDEF_PROFIL.forEach(function (a) {
+      liste.push({ yol: "profil." + a.anahtar, etiket: a.etiket, tip: a.tip, grup: "Şirket Profili", tur: "skaler" });
+    });
+    // 2) Modül anlatıları + kayıt tabloları (data/tsrs_modulleri.js)
+    d.modulTanimlari().forEach(function (m) {
+      (m.anlatilar || []).forEach(function (al) {
+        liste.push({
+          yol: "moduller." + m.id + ".anlatilar." + al.anahtar,
+          etiket: al.etiket, tip: al.tip || "uzun_metin", grup: m.baslik, tur: "skaler"
+        });
+      });
+      if (m.tablo) {
+        liste.push({
+          yol: "moduller." + m.id + ".kayitlar", etiket: m.tablo.etiket + " (tablo)",
+          tip: "tablo", grup: m.baslik, tur: "dizi", sutunlar: m.tablo.sutunlar || []
+        });
+      }
+    });
+    // 3) Sektör metrikleri (seçili ciltlerden — data/sektor_ciltleri.js)
+    d.aktifMetrikler().forEach(function (mk) {
+      var alan = (mk.tip === "ta") ? "metin" : "deger";
+      liste.push({
+        yol: "sektorMetrik." + mk.kod + "." + alan, etiket: (mk.kod + " — " + mk.ad),
+        tip: mk.tip, grup: "Sektör Metrikleri", tur: "skaler"
+      });
+    });
+    // 4) Veri dizileri
+    liste.push({ yol: "faaliyet", etiket: "Faaliyet (Kapsam 1 & 3)", tip: "tablo", grup: "Veri Girişi", tur: "dizi" });
+    liste.push({ yol: "elektrik", etiket: "Elektrik (Kapsam 2)", tip: "tablo", grup: "Veri Girişi", tur: "dizi" });
+    liste.push({ yol: "sogutucu", etiket: "Soğutucu / Kaçak Gaz", tip: "tablo", grup: "Veri Girişi", tur: "dizi" });
+    // 5) Doldurulma durumu
+    liste.forEach(function (a) {
+      if (a.tur === "dizi") {
+        var arr = yolOku(d.veri, a.yol);
+        a.adet = Array.isArray(arr) ? arr.length : 0;
+        a.dolu = a.adet > 0;
+      } else {
+        a.dolu = !bosMu(yolOku(d.veri, a.yol));
+      }
+    });
+    return liste;
+  };
+
+  /* ---- BOŞ ALAN MANİFESTOSU ----
+     Açık müşteri için doldurulması gereken TÜM boşlukların listesi.
+     Belge-arama kontrol listesi + "hepsini kapsadık mı" kanıtı. */
+  d.bosAlanOzeti = function () {
+    var h = d.hedefAlanlar();
+    var ozet = { toplam: h.length, dolu: 0, bos: 0, gruplar: {} };
+    h.forEach(function (a) {
+      if (a.dolu) ozet.dolu++; else ozet.bos++;
+      var g = ozet.gruplar[a.grup] || (ozet.gruplar[a.grup] = { toplam: 0, bos: 0 });
+      g.toplam++; if (!a.dolu) g.bos++;
+    });
+    return ozet;
+  };
+  d.bosAlanManifestoIndir = function () {
+    var h = d.hedefAlanlar(), sep = ";";
+    function hucre(v) { v = String(v == null ? "" : v); return (v.indexOf(sep) > -1 || v.indexOf('"') > -1) ? '"' + v.replace(/"/g, '""') + '"' : v; }
+    var satirlar = [["grup", "alan", "yol", "tip", "durum"].join(sep)];
+    h.forEach(function (a) {
+      satirlar.push([hucre(a.grup), hucre(a.etiket), hucre(a.yol), hucre(a.tip),
+        a.tur === "dizi" ? (a.dolu ? a.adet + " kayıt" : "BOŞ") : (a.dolu ? "dolu" : "BOŞ")].join(sep));
+    });
+    var p = d.veri.profil || {};
+    var ad = "bos-alan-manifestosu-" + dosyaSlug(p.unvan) + (p.yil ? "-" + p.yil : "") + ".csv";
+    d.dosyaIndir(ad, "﻿" + satirlar.join("\r\n"), "text/csv");
+  };
+
+  // Dizi kaydı için dedup anahtarı (yeniden yüklemede tekrarı önler)
+  function diziAnahtar(dizi, k) {
+    k = k || {};
+    if (dizi === "faaliyet") return [k.tesis, k.kategori, k.kaynak, k.miktar, k.birim, k.donem].join("|").toLocaleLowerCase("tr");
+    if (dizi === "elektrik") return [k.tesis, k.sebeke, k.kwh, k.donem].join("|").toLocaleLowerCase("tr");
+    if (dizi === "sogutucu") return [k.ekipman, k.gaz, k.donem].join("|").toLocaleLowerCase("tr");
+    return JSON.stringify(k);
+  }
+
+  /* ---- İÇE AKTARIM ANALİZİ (kuru çalıştırma — YAZMAZ) ----
+     Paketi açık müşteriyle karşılaştırır; ne olacağını önizleme için döner.
+     { gecerli, dolacak:[], zatenDolu:[], cakisma:[], eklenecekKayit, dedupAtlanacak, hata } */
+  d.iceAktarimAnaliz = function (paket) {
+    if (typeof paket === "string") paket = guvenliParse(paket, null);
+    var r = { gecerli: false, dolacak: [], zatenDolu: [], cakisma: [], eklenecekKayit: 0, dedupAtlanacak: 0, kaynakBelgeler: [], hata: null };
+    if (!paket || paket.tur !== "KarbonMotoru_IceAktarimPaketi") { r.hata = "Bu dosya bir Karbon Motoru İçe Aktarım Paketi değil."; return r; }
+    r.gecerli = true;
+    r.kaynakBelgeler = paket.kaynakBelgeler || [];
+    (paket.doldur || []).forEach(function (g) {
+      if (!g || !g.yol) return;
+      var mevcut = yolOku(d.veri, g.yol);
+      if (bosMu(mevcut)) r.dolacak.push({ yol: g.yol, deger: g.deger, kaynak: g.kaynak || "", guven: g.guven || "" });
+      else if (String(mevcut).trim() !== String(g.deger).trim()) r.cakisma.push({ yol: g.yol, mevcut: mevcut, yeni: g.deger, kaynak: g.kaynak || "" });
+      else r.zatenDolu.push(g.yol);
+    });
+    ["faaliyet", "elektrik", "sogutucu"].forEach(function (dz) {
+      var mevcutArr = d.veri[dz] || [], gorulen = {};
+      (paket[dz] || []).forEach(function (kayit) {
+        var ak = diziAnahtar(dz, kayit);
+        if (gorulen[ak] || mevcutArr.some(function (x) { return diziAnahtar(dz, x) === ak; })) r.dedupAtlanacak++;
+        else { gorulen[ak] = true; r.eklenecekKayit++; }
+      });
+    });
+    (paket.modulKayit || []).forEach(function () { r.eklenecekKayit++; });
+    return r;
+  };
+
+  /* ---- İÇE AKTARIM UYGULA (yazar) ----
+     opts.cakismaYollari: kullanıcının "üzerine yaz" onayı verdiği yol dizisi (varsayılan yok).
+     Döner: analiz sonucuna benzer gerçekleşme raporu. */
+  d.iceAktarimUygula = function (paket, opts) {
+    opts = opts || {};
+    if (typeof paket === "string") paket = guvenliParse(paket, null);
+    if (!paket || paket.tur !== "KarbonMotoru_IceAktarimPaketi") return { hata: "Geçersiz paket" };
+    var cakismaYaz = {};
+    (opts.cakismaYollari || []).forEach(function (y) { cakismaYaz[y] = true; });
+    var sonuc = { dolduruldu: 0, cakismaYazildi: 0, cakismaAtlandi: 0, zatenDolu: 0, eklenenKayit: 0, dedupAtlanan: 0 };
+    if (!d.veri.kaynaklar) d.veri.kaynaklar = {};
+    var tarih = new Date().toISOString().slice(0, 10);
+    function kaynakYaz(yol, g) { d.veri.kaynaklar[yol] = { kaynak: g.kaynak || "", guven: g.guven || "", tarih: tarih, belge: paket.kaynakBelgeler || [] }; }
+    (paket.doldur || []).forEach(function (g) {
+      if (!g || !g.yol) return;
+      var mevcut = yolOku(d.veri, g.yol);
+      if (bosMu(mevcut)) { yolYaz(d.veri, g.yol, g.deger); kaynakYaz(g.yol, g); sonuc.dolduruldu++; }
+      else if (String(mevcut).trim() !== String(g.deger).trim()) {
+        if (cakismaYaz[g.yol]) { yolYaz(d.veri, g.yol, g.deger); kaynakYaz(g.yol, g); sonuc.cakismaYazildi++; }
+        else sonuc.cakismaAtlandi++;
+      } else sonuc.zatenDolu++;
+    });
+    ["faaliyet", "elektrik", "sogutucu"].forEach(function (dz) {
+      if (!Array.isArray(d.veri[dz])) d.veri[dz] = [];
+      var onek = dz === "faaliyet" ? "F" : dz === "elektrik" ? "E" : "S";
+      (paket[dz] || []).forEach(function (kayit) {
+        var ak = diziAnahtar(dz, kayit);
+        if (d.veri[dz].some(function (x) { return diziAnahtar(dz, x) === ak; })) { sonuc.dedupAtlanan++; return; }
+        if (!kayit.no) kayit.no = d.yeniNo(onek);
+        // Belge dayanağı ayrı alanda (_kaynak); "kaynak" gerçek veri alanıdır (ör. yakıt adı)
+        if (kayit._kaynak) { kayit.aciklama = (kayit.aciklama ? kayit.aciklama + " " : "") + "[Kaynak: " + kayit._kaynak + "]"; delete kayit._kaynak; }
+        d.veri[dz].push(kayit);
+        sonuc.eklenenKayit++;
+      });
+    });
+    (paket.modulKayit || []).forEach(function (mk) {
+      if (!mk || !mk.modul || !mk.kayit) return;
+      var mv = d.modulVeri(mk.modul);
+      if (mk.kayit._kaynak) { mk.kayit.dayanak = "[Kaynak: " + mk.kayit._kaynak + "]"; delete mk.kayit._kaynak; }
+      mv.kayitlar.push(mk.kayit);
+      sonuc.eklenenKayit++;
+    });
+    d.kaydet(true);
+    return sonuc;
+  };
+
+  /* ---- FAALİYET DÖKÜMÜ DIŞA AKTARMA (CSV / XLSX) ----
+     Tüm faaliyet/soğutucu/elektrik kayıtları kapsam'a göre sınıflandırılmış,
+     detaylı kolonlarla. Motor.faaliyetDokumu() veriyi üretir. */
+  function dosyaSlug(s) {
+    return String(s || "sirket").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") || "sirket";
+  }
+  function dokumDosyaAdi(uzanti) {
+    var p = d.veri.profil || {};
+    return "faaliyet-dokumu-" + dosyaSlug(p.unvan) + (p.yil ? "-" + p.yil : "") + "." + uzanti;
+  }
+  d.faaliyetCsvIndir = function () {
+    if (!window.Motor || !Motor.faaliyetDokumu) return;
+    var dk = Motor.faaliyetDokumu(), sep = ";";
+    function hucre(v) {
+      if (v == null) v = "";
+      else if (typeof v === "number") v = isFinite(v) ? String(v).replace(".", ",") : "";  // TR ondalık, gruplama yok
+      v = String(v);
+      if (v.indexOf(sep) > -1 || v.indexOf('"') > -1 || v.indexOf("\n") > -1) v = '"' + v.replace(/"/g, '""') + '"';
+      return v;
+    }
+    var satir = function (hucreler) { return hucreler.join(sep); };
+    var baslik = satir(dk.kolonlar.map(function (k) { return hucre(k.etiket); }));
+    var govde = dk.satirlar.map(function (r) { return satir(dk.kolonlar.map(function (k) { return hucre(r[k.anahtar]); })); });
+    var icerik = "﻿" + [baslik].concat(govde).join("\r\n");   // UTF-8 BOM (Excel'de Türkçe doğru)
+    d.dosyaIndir(dokumDosyaAdi("csv"), icerik, "text/csv");
+  };
+  d.faaliyetXlsxIndir = function () {
+    if (!window.Motor || !Motor.faaliyetDokumu) return;
+    function uret() {
+      if (!window.XLSX) { if (window.UI) UI.bildir("XLSX kütüphanesi yok; CSV indiriliyor", true); d.faaliyetCsvIndir(); return; }
+      var dk = Motor.faaliyetDokumu();
+      var aoa = [dk.kolonlar.map(function (k) { return k.etiket; })];
+      dk.satirlar.forEach(function (r) {
+        aoa.push(dk.kolonlar.map(function (k) { var x = r[k.anahtar]; return (typeof x === "number" && !isFinite(x)) ? "" : x; }));
+      });
+      var ws = XLSX.utils.aoa_to_sheet(aoa);
+      ws["!cols"] = dk.kolonlar.map(function (k) { return { wch: Math.max(10, k.etiket.length + 2) }; });
+      var wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, "Faaliyet Dökümü");
+      XLSX.writeFile(wb, dokumDosyaAdi("xlsx"));
+    }
+    if (window.XLSX) { uret(); return; }
+    if (window.UI) UI.bildir("XLSX hazırlanıyor…");
+    var sc = document.createElement("script");
+    sc.src = "https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js";
+    sc.onload = uret;
+    sc.onerror = function () { if (window.UI) UI.bildir("XLSX yüklenemedi (çevrimdışı olabilir); CSV indiriliyor", true); d.faaliyetCsvIndir(); };
+    document.head.appendChild(sc);
   };
 
   return d;

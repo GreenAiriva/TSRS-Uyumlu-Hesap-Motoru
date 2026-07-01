@@ -218,13 +218,45 @@ table.veri .co2e{font-weight:600;color:var(--antrasit)}
   border-bottom:1px solid var(--cizgi);padding-bottom:6px;margin-bottom:20px;letter-spacing:.5px;text-transform:uppercase}
 .rapor-anlat{margin:8px 0 14px;white-space:pre-wrap}
 .rapor-anlat .bos{color:var(--soluk);font-style:italic}
+.rapor-sayfa .bos{color:var(--soluk);font-style:italic}
+/* Zorunlu ama doldurulmamış alanların görünür işareti — baskıda da görünür */
+.eksik-veri{color:#B3402E;background:#FBEAE7;border:1px solid #EAC5BE;border-radius:3px;
+  padding:0 4px;font-size:11px;font-weight:600;white-space:nowrap}
+
+/* ---- KGK biçim öğeleri: kapak, breadcrumb şeridi, altlık ---- */
+.rapor-kapak{text-align:center;min-height:230mm;display:flex;flex-direction:column;
+  align-items:center;justify-content:center}
+.rapor-kapak .strata{width:60%;max-width:320px}
+.kapak-ust{font-size:12px;letter-spacing:.08em;color:var(--soluk);margin-bottom:18px;text-transform:uppercase}
+.rapor-kapak .kapak-baslik{font-size:30px;letter-spacing:1px;border:none;color:var(--antrasit);margin:0 0 22px;line-height:1.25}
+.kapak-unvan{font-size:20px;font-weight:700;color:var(--oksit,#B4642D);margin-bottom:14px}
+.kapak-donem{font-size:13px;letter-spacing:.05em;color:var(--antrasit);margin-bottom:30px}
+.kapak-std{font-size:12.5px;color:var(--soluk);margin-bottom:6px}
+.kapak-alt{font-size:11px;color:var(--soluk)}
+.bolum-serit{display:flex;flex-wrap:wrap;gap:2px;border-bottom:2px solid var(--antrasit);
+  margin-bottom:18px;padding-bottom:0}
+.bolum-serit .serit-ad{font-size:9.5px;letter-spacing:.03em;text-transform:uppercase;color:var(--soluk);
+  padding:4px 8px;border-radius:3px 3px 0 0;white-space:nowrap}
+.bolum-serit .serit-ad.aktif{background:var(--antrasit);color:#fff;font-weight:600}
+.rapor-altlik{display:none}
+
 @media print{
+  @page{size:A4;margin:14mm 12mm 16mm}
   body{background:#fff}
-  .kenar,.ust-bar,.yazdirma-gizle,.bildirim{display:none!important}
+  .kenar,.ust-bar,.yazdirma-gizle,.bildirim,.kenar-altlik,.uyum-panel{display:none!important}
   .uygulama{display:block}
   .govde{padding:0;max-width:none}
-  .rapor-sayfa{border:none;box-shadow:none;margin:0;padding:10mm 6mm;page-break-after:always;max-width:none}
+  .rapor-sayfa{border:none;box-shadow:none;margin:0;padding:6mm 4mm;page-break-after:always;max-width:none}
   .rapor-sayfa:last-child{page-break-after:auto}
+  .rapor-sayfa table,.rapor-sayfa tr{break-inside:avoid}
+  .rapor-sayfa thead{display:table-header-group}
+  .rapor-sayfa h1{break-before:page}
+  .rapor-kapak{break-before:auto;min-height:240mm}
+  .rapor-sayfa h2,.rapor-sayfa h3{break-after:avoid}
+  .rapor-anlat{orphans:3;widows:3}
+  /* Renk koruması: baskıda arka planlar beyaza dönmesin */
+  .rapor-sayfa th,.bolum-serit .serit-ad.aktif,.strata span,.eksik-veri,.rozet{
+    -webkit-print-color-adjust:exact;print-color-adjust:exact}
 }
 
 /* ---- Duyarlılık ---- */
