@@ -620,10 +620,22 @@ window.UI = (function () {
       profilAlan({ anahtar: "hasilat", etiket: "Net Hasılat (Bin " + (Depo.ayar("para_birimi") || "TL") + ")", tip: "sayi", zorunlu: true }),
       profilAlan({ anahtar: "uretim", etiket: "Yıllık Üretim (ton cevher/ürün)", tip: "sayi", yardim: "Madenciliğe özgü yoğunluk göstergesi (isteğe bağlı)" })
     ])]));
-    kok.appendChild(UI.kart("Doğrulama (Güvence)", [el("div", { class: "form-izgara" }, [
-      profilAlan({ anahtar: "dogrulama", etiket: "Güvence Durumu", tip: "secim", liste: "dogrulama_durumu" }),
-      profilAlan({ anahtar: "dogrulayici", etiket: "Doğrulayıcı Kuruluş", tip: "metin" })
-    ])]));
+    kok.appendChild(UI.kart("Doğrulama (Güvence) ve Ek Künye", [
+      el("p", { style: "margin:0 0 12px;font-size:12.5px;color:var(--soluk)" },
+        ["Güvence beyanı ve iletişim künyesi rapor kapağı/künye bölümüne ve içerik indeksine yansır. Doldurulmayan alanlar raporda [VERİ BEKLENİYOR] olarak işaretlenir."]),
+      el("div", { class: "form-izgara" }, [
+        profilAlan({ anahtar: "dogrulama", etiket: "Güvence Durumu", tip: "secim", liste: "dogrulama_durumu" }),
+        profilAlan({ anahtar: "dogrulayici", etiket: "Doğrulayıcı Kuruluş", tip: "metin" }),
+        profilAlan({ anahtar: "dogrulamaStandart", etiket: "Güvence Standardı", tip: "secim",
+          liste: ["ISO 14064-3:2019", "GDS 3000 / GDS 3410", "ISAE 3000 / 3410", "Diğer"], yardim: "Sera gazı doğrulama/güvence standardı" }),
+        profilAlan({ anahtar: "guvenceSeviye", etiket: "Güvence Seviyesi", tip: "secim",
+          liste: ["Makul (reasonable)", "Sınırlı (limited)", "Güvence alınmadı"], yardim: "TSRS 2 md. 29(a) güvence düzeyi" }),
+        profilAlan({ anahtar: "ticaretSicilNo", etiket: "Ticaret Sicil No", tip: "metin" }),
+        profilAlan({ anahtar: "iletisimEposta", etiket: "İletişim E-postası", tip: "metin", yardim: "Rapor sorumlusunun e-postası" }),
+        profilAlan({ anahtar: "raporDanismani", etiket: "Raporlama Danışmanı", tip: "metin", yardim: "Varsa raporu hazırlayan danışman kuruluş" }),
+        profilAlan({ anahtar: "web", etiket: "Web Sitesi", tip: "metin" })
+      ])
+    ]));
 
     kok.appendChild(UI.kart("Karşılaştırmalı Bilgi ve İç Karbon Fiyatı", [
       el("p", { style: "margin:0 0 12px;font-size:12.5px;color:var(--soluk)" },

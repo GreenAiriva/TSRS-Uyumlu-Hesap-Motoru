@@ -707,13 +707,13 @@ window.Motor = (function () {
       kontrol: function (c) {
         var h = (c.mod("hedefler").kayitlar) || [];
         if (!h.length) return WARN("Henüz iklim hedefi tanımlanmadı.");
-        var eksik = h.filter(function (x) { return !dolu(x.baz_yil) || !dolu(x.hedef_yil); });
-        return eksik.length ? WARN(eksik.length + " hedefte baz/hedef yılı eksik.") : PASS(); } },
+        var eksik = h.filter(function (x) { return !dolu(x.baz_yil) || !dolu(x.hedef_yil) || !dolu(x.kapsam); });
+        return eksik.length ? WARN(eksik.length + " hedefte baz/hedef yılı veya kapsam eksik.") : PASS(); } },
     { id: "K10", kategori: "Hedefler", sertlik: "oneri", tsrsRef: "TSRS 2 md.35", bolum: "5.4 İklim Hedefleri",
       aciklama: "Net hedef varsa ilgili brüt hedef de ayrıca verilmeli",
       kontrol: function (c) {
         var h = (c.mod("hedefler").kayitlar) || [];
-        var net = h.some(function (x) { return /net/i.test(x.tur || ""); });
+        var net = h.some(function (x) { return /net/i.test(x.brut_net || ""); });
         return net ? WARN("Net hedef tespit edildi; brüt hedefin de ayrıca verildiğini doğrulayın.") : PASS(); } },
     { id: "K11", kategori: "Karşılaştırma", sertlik: "zorunlu", tsrsRef: "TSRS 1 md.70", bolum: "5.1 Emisyon Özeti",
       aciklama: "Önceki dönem karşılaştırmalı bilgisi verilmeli (ilk yıl muaf)",

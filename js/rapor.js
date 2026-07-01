@@ -186,13 +186,17 @@ window.Rapor = (function () {
     s1.appendChild(el("table", null, [el("tbody", null, [
       trS(["Ticari Unvan", deg(p.unvan)]), trS(["Vergi / MERSİS No", deg(p.vergiNo)]),
       trS(["NACE Kodu / Sektör", dolu(p.nace) ? (p.nace + (p.sektor ? " — " + p.sektor : "")) : deg(null)]),
-      trS(["Merkez Adresi", p.adres]), trS(["Rapor Sorumlusu", p.iletisim]),
+      trS(["Merkez Adresi", p.adres]), trS(["Ticaret Sicil No", p.ticaretSicilNo]),
+      trS(["Rapor Sorumlusu", (p.iletisim || "—") + (p.iletisimEposta ? " — " + p.iletisimEposta : "")]),
+      trS(["Web Sitesi", p.web]),
       trS(["Raporlama Dönemi", (dolu(p.donemBas) || dolu(p.donemBit)) ? (tarihTR(p.donemBas) + " — " + tarihTR(p.donemBit)) : deg(null)]),
       trS(["Konsolidasyon Yaklaşımı", p.sinir]),
       trS(["Baz Yıl", p.bazYil]), trS(["İlk TSRS Raporu", p.ilkRapor]),
       trS(["Çalışan Sayısı (TZE)", p.fte]),
       trS(["Net Hasılat (Bin " + (Depo.ayar("para_birimi") || "TL") + ")", p.hasilat && Motor.fmt(parseFloat(p.hasilat), 0)]),
-      trS(["Güvence Durumu", (p.dogrulama || "—") + (p.dogrulayici ? " — " + p.dogrulayici : "")])
+      trS(["Güvence Durumu", (p.dogrulama || "—") + (p.guvenceSeviye ? " — " + p.guvenceSeviye : "") +
+        (p.dogrulayici ? " • " + p.dogrulayici : "") + (p.dogrulamaStandart ? " (" + p.dogrulamaStandart + ")" : "")]),
+      trS(["Raporlama Danışmanı", p.raporDanismani])
     ])]));
     s1.appendChild(anlat("Bu rapor, TSRS 2 İklimle İlgili Açıklamalar Standardı kapsamındaki hükümlere ve ilgili olduğu " +
       "ölçüde TSRS 1 Genel Hükümler'e uygun olarak hazırlanmıştır." +
@@ -247,6 +251,17 @@ window.Rapor = (function () {
       ]));
     }
     anlatBolumu(sStr, "direnclilik", "3.3 İklim Dirençliliği ve Senaryo Analizi");
+    var senaryolar = mod("direnclilik").kayitlar || [];
+    if (senaryolar.length) {
+      sStr.appendChild(el("h3", { style: "margin:10px 0 2px;font-size:13px" }, ["Kullanılan İklim Senaryoları (TSRS 2 md. 22)"]));
+      sStr.appendChild(el("table", null, [
+        th(["Senaryo", "Paris Uyumlu", "Sıcaklık", "Zaman Ufku", { t: "Nicel Etki (Bin TL)", sinif: "sayi" }, "Sonuç / Kırılganlık"]),
+        el("tbody", null, senaryolar.map(function (s) {
+          return trS([s.senaryo || "—", s.paris || "—", s.sicaklik || "—", s.ufuk || "—",
+            { sayi: dolu(s.tutar) ? Motor.fmt(parseFloat(s.tutar), 0) : "—" }, UI.kisalt(s.sonuc, 56)]);
+        }))
+      ]));
+    }
     kok.appendChild(sStr);
 
     /* ============ s4 — RİSK YÖNETİMİ ============ */
@@ -382,9 +397,9 @@ window.Rapor = (function () {
     var hedefler = mod("hedefler").kayitlar || [];
     if (hedefler.length) {
       sMet.appendChild(el("table", null, [
-        th(["Hedef", { t: "Brüt/Net", sinif: "" }, "Tür", { t: "Baz Yıl → Hedef Yılı", sinif: "sayi" }, { t: "Baz → Hedef Değer", sinif: "sayi" }, { t: "Mevcut", sinif: "sayi" }]),
+        th(["Hedef", "Kapsam", "Tür", "Brüt/Net", { t: "Baz Yıl → Hedef Yılı", sinif: "sayi" }, { t: "Baz → Hedef Değer", sinif: "sayi" }, { t: "Mevcut", sinif: "sayi" }]),
         el("tbody", null, hedefler.map(function (h) {
-          return trS([UI.kisalt(h.ad, 30), (/net/i.test(h.tur || "") ? "Net" : "Brüt"), h.tur,
+          return trS([UI.kisalt(h.ad, 28), h.kapsam || "—", h.tur || "—", h.brut_net || "—",
             { sayi: (h.baz_yil || "—") + " → " + (h.hedef_yil || "—") },
             { sayi: Motor.fmt(parseFloat(h.baz_deger), 1) + " → " + Motor.fmt(parseFloat(h.hedef_deger), 1) },
             { sayi: Motor.fmt(parseFloat(h.mevcut), 1) }]);
