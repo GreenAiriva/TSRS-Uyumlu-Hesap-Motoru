@@ -273,8 +273,23 @@ window.App = (function () {
   App.musteriAc = function (id) {
     Depo.yukle(id).then(function () {
       App.uygulamaGoster();
+      Depo.gercekZamanliIzle(id, App.uzaktanGuncelleme);   // eşzamanlı düzenleme farkındalığı
       UI.bildir("Müşteri açıldı");
     }).catch(function (e) { UI.bildir("Müşteri açılamadı: " + (e.message || e), true); });
+  };
+
+  /* Başka bir kullanıcı açık müşteriyi güncellediğinde çağrılır (Realtime) */
+  App.uzaktanGuncelleme = function (surum) {
+    UI.bildir("Bu müşteriyi başka bir kullanıcı güncelledi (sürüm " + surum + "). En güncel veri için yenileyin.", true);
+    var altlik = document.querySelector("#uygulama .kenar .kenar-altlik");
+    if (!altlik || altlik.querySelector(".uzak-guncelleme")) return;
+    var yenile = el("button", { class: "btn kucuk uzak-guncelleme", type: "button",
+      style: "width:100%;margin-top:8px;background:" + OKSIT + ";color:#fff;border:0" }, ["⟳ Başkası güncelledi — Yenile"]);
+    yenile.onclick = function () {
+      if (!Depo.aktifMusteriId) return;
+      Depo.yukle(Depo.aktifMusteriId).then(function () { UI.bildir("Yenilendi"); UI.ciz(); App.kenarAltligiEkle(); });
+    };
+    altlik.appendChild(yenile);
   };
 
   /* ============================================================

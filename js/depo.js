@@ -206,7 +206,31 @@ window.Depo = (function () {
     return SB.from("customers").delete().eq("id", id).then(function (q) { return q.error ? q.error.message : null; });
   };
   d.musteriKapat = function () {
+    d.izlemeyiBirak();
     d.aktifMusteriId = null; d.veri = bosVeri(); d.surumNo = 0; d._sonKayit = null;
+  };
+
+  /* ---- Gerçek zamanlı izleme (eşzamanlı düzenleme farkındalığı) ----
+     Açık müşterinin satırı başka bir kullanıcı tarafından güncellenirse geriCagir(surum) tetiklenir. */
+  d._kanal = null;
+  d.gercekZamanliIzle = function (musteriId, geriCagir) {
+    if (!window.SB || !SB.channel) return;
+    d.izlemeyiBirak();
+    d._kanal = SB.channel("musteri-" + musteriId)
+      .on("postgres_changes",
+        { event: "UPDATE", schema: "public", table: "customers", filter: "id=eq." + musteriId },
+        function (payload) {
+          var yeni = payload.new || {};
+          if (yeni.surum_no > d.surumNo && yeni.updated_by &&
+              (!d.aktifKullanici || yeni.updated_by !== d.aktifKullanici.id)) {
+            if (typeof geriCagir === "function") geriCagir(yeni.surum_no);
+          }
+        })
+      .subscribe();
+  };
+  d.izlemeyiBirak = function () {
+    if (d._kanal && window.SB && SB.removeChannel) { try { SB.removeChannel(d._kanal); } catch (e) {} }
+    d._kanal = null;
   };
 
   /* ---- Global konfig (app_config) kaydı — RLS gereği yalnız admin yazabilir ---- */
