@@ -102,6 +102,7 @@ window.Depo = (function () {
   d.kaydet = function (sessiz) {
     if (!d.aktifMusteriId) return;        // müşteri seçilmeden kayıt olmaz
     d._kayitBekliyor = true;
+    if (window.UI && UI.kayitDurumu) UI.kayitDurumu("kaydediliyor");
     clearTimeout(kayitZamanlayici);
     kayitZamanlayici = setTimeout(function () { d._flush(sessiz); }, 350);
   };
@@ -124,32 +125,58 @@ window.Depo = (function () {
     d._kayitBekliyor = false; d._kayitUcuyor = true;
     var yeniSurum = d.surumNo + 1;
     var gonder = derinKopya(yeni);
+    var musteriId = d.aktifMusteriId;   // yanıt gelene dek müşteri değişebilir
     return SB.from("customers").update({ data: gonder, surum_no: yeniSurum })
-      .eq("id", d.aktifMusteriId).eq("surum_no", d.surumNo).select("surum_no")
+      .eq("id", musteriId).eq("surum_no", d.surumNo).select("surum_no")
       .then(function (upd) {
         if (upd.error) throw upd.error;
         if (!upd.data || !upd.data.length) {
           d._kayitUcuyor = false;
-          if (window.UI) UI.bildir("Bu müşteriyi başka bir kullanıcı değiştirdi. Sayfayı yenileyip tekrar deneyin.", true);
+          // Çakışma: kalıcı banner ile kurtarma seçenekleri sun (toast yeterli değil)
+          if (window.UI && UI.kayitCakismasi) UI.kayitCakismasi();
+          else if (window.UI) UI.bildir("Bu müşteriyi başka bir kullanıcı değiştirdi. Sayfayı yenileyip tekrar deneyin.", true);
           return;
         }
-        d.surumNo = yeniSurum;
-        d._sonKayit = gonder;
+        if (d.aktifMusteriId === musteriId) {   // müşteri bu arada değiştiyse bayat duruma yazma
+          d.surumNo = yeniSurum;
+          d._sonKayit = gonder;
+        }
         d._kayitUcuyor = false;
+        if (window.UI && UI.bannerKapat) { UI.bannerKapat("kayit-hata"); UI.bannerKapat("kayit-cakisma"); }
+        if (window.UI && UI.kayitDurumu) UI.kayitDurumu("kaydedildi");
         if (!sessiz && window.UI) UI.bildir("Kaydedildi");
         if (patch && patch.length && window.jsonpatch) {
           SB.from("customer_versions").insert({
-            customer_id: d.aktifMusteriId, surum_no: yeniSurum, ters_patch: patch, ozet: ozetUret(patch)
-          }).then(function () {
+            customer_id: musteriId, surum_no: yeniSurum, ters_patch: patch, ozet: ozetUret(patch)
+          }).then(function (vq) {
+            if (vq && vq.error) { console.warn("Sürüm geçmişi yazılamadı: " + vq.error.message); return; }
             if (yeniSurum > 50) {
               SB.from("customer_versions").delete()
-                .eq("customer_id", d.aktifMusteriId).lte("surum_no", yeniSurum - 50);
+                .eq("customer_id", musteriId).lte("surum_no", yeniSurum - 50);
             }
-          });
+          })["catch"](function (e) { console.warn("Sürüm geçmişi yazılamadı:", e); });
         }
       })["catch"](function (e) {
         d._kayitUcuyor = false;
-        if (window.UI) UI.bildir("Kayıt hatası: " + (e.message || e), true);
+        if (window.UI && UI.kayitDurumu) UI.kayitDurumu("hata");
+        if (window.UI && UI.banner) {
+          UI.banner("kayit-hata", "Kayıt buluta yazılamadı: " + (e.message || e) +
+            " — verileriniz tarayıcıda duruyor, bağlantıyı kontrol edip yeniden deneyin.",
+            [{ etiket: "Yeniden dene", tik: function () { d.kaydet(); } }]);
+        } else if (window.UI) UI.bildir("Kayıt hatası: " + (e.message || e), true);
+      });
+  };
+
+  /* Çakışma çözümü: "uzak" = buluttaki güncel hâli getir (yereldeki kaydedilmemiş
+     değişiklikler gider), "uzerine" = yerel veriyi güncel sürümün üstüne yaz. */
+  d.cakismaCoz = function (mod) {
+    if (!d.aktifMusteriId || !window.SB) return Promise.resolve("Bağlantı yok");
+    if (mod === "uzak") return d.yukle(d.aktifMusteriId).then(function () { return null; });
+    return SB.from("customers").select("surum_no").eq("id", d.aktifMusteriId).single()
+      .then(function (q) {
+        if (q.error) return q.error.message;
+        d.surumNo = q.data.surum_no || 0;
+        return d._flush(true).then(function () { return null; });
       });
   };
 
@@ -185,13 +212,15 @@ window.Depo = (function () {
   };
 
   /* ---- Müşteri (şirket) yönetimi ---- */
+  /* Dönen: { satirlar: [...], hata: null|mesaj } — hata boş listeyle KARIŞTIRILMAZ
+     (auth.js hata durumunda "Henüz müşteri yok" yerine yeniden-dene ekranı gösterir) */
   d.musteriListele = function () {
-    if (!window.SB) return Promise.resolve([]);
+    if (!window.SB) return Promise.resolve({ satirlar: [], hata: "Bulut bağlantısı yok" });
     return SB.from("customers").select("id, unvan, nace, yil, updated_at").order("updated_at", { ascending: false })
       .then(function (q) {
-        if (q.error) { if (window.UI) UI.bildir("Müşteri listesi alınamadı: " + q.error.message, true); return []; }
-        return q.data || [];
-      });
+        if (q.error) return { satirlar: [], hata: q.error.message };
+        return { satirlar: q.data || [], hata: null };
+      })["catch"](function (e) { return { satirlar: [], hata: String(e && e.message || e) }; });
   };
   d.musteriOlustur = function (unvan, opts) {
     opts = opts || {};
@@ -206,6 +235,8 @@ window.Depo = (function () {
     return SB.from("customers").delete().eq("id", id).then(function (q) { return q.error ? q.error.message : null; });
   };
   d.musteriKapat = function () {
+    // Bekleyen otokayıt varsa müşteri kapanmadan hemen gönder (sessiz veri kaybını önler)
+    if (d._kayitBekliyor) { clearTimeout(kayitZamanlayici); d._flush(true); }
     d.izlemeyiBirak();
     d.aktifMusteriId = null; d.veri = bosVeri(); d.surumNo = 0; d._sonKayit = null;
   };
@@ -244,6 +275,11 @@ window.Depo = (function () {
         modul_tanim: d.modulTanimOzel, updated_at: new Date().toISOString()
       }).eq("id", 1).select("id").then(function (q) {
         if (q.error) { if (window.UI) UI.bildir("Ayar kaydedilemedi (yönetici gerekir): " + q.error.message, true); }
+        // RLS engellerse hata değil 0 satır döner — sahte "kaydedildi" gösterme
+        else if (!q.data || !q.data.length) {
+          if (window.UI) UI.bildir("Ayar buluta YAZILAMADI: bu işlem yönetici yetkisi gerektirir. " +
+            "Değişiklik yalnız bu oturumda geçerli kalır.", true);
+        }
         else if (window.UI) UI.bildir("Referans/ayar kaydedildi");
       });
     }, 350);
@@ -448,11 +484,16 @@ window.Depo = (function () {
     if (!p || p.tur !== "KarbonMotoru_Yedek") return "Bu dosya bir Karbon Motoru yedeği değil.";
     d.veri = Object.assign(bosVeri(), p.veri || {});
     d.kaydet(true);   // müşteri verisini buluta yaz
-    // Referans/ayar düzenlemeleri yalnız yönetici hesabında app_config'e yazılabilir
+    // Referans/ayar düzenlemeleri yalnız yönetici hesabında app_config'e yazılabilir;
+    // yönetici değilse yerelde de uygulanmaz (sunucudan sessiz ayrışmayı önler)
     if (p.ref || p.ayar || p.liste || p.modulTanim) {
-      d.refOzel = p.ref || {}; d.ayarOzel = p.ayar || {};
-      d.listeOzel = p.liste || {}; d.modulTanimOzel = p.modulTanim || null;
-      if (d.aktifKullanici && d.aktifKullanici.rol === "admin") d.konfigKaydet();
+      if (d.aktifKullanici && d.aktifKullanici.rol === "admin") {
+        d.refOzel = p.ref || {}; d.ayarOzel = p.ayar || {};
+        d.listeOzel = p.liste || {}; d.modulTanimOzel = p.modulTanim || null;
+        d.konfigKaydet();
+      } else if (window.UI) {
+        UI.bildir("Yedekteki referans/ayar düzenlemeleri atlandı (yönetici yetkisi gerekir); müşteri verisi yüklendi.", true);
+      }
     }
     return null;
   };
@@ -515,8 +556,40 @@ window.Depo = (function () {
      Beklenen sütunlar (esnek, başlık satırından eşlenir):
      tesis, kategori, kaynak, miktar, birim, donem, aciklama
      Dönen: { eklenen, atlanan, hatalar:[] } */
+  /* CSV hücresindeki sayıyı hem TR (1.234,56 / 10,5) hem EN (1,234.56 / 10.5)
+     biçiminde güvenle çözer. Dönen: { deger: "nokta.ondalıklı metin", supheli: bool }
+     ya da null (sayı değil). supheli=true → tek ayraç + tam 3 hane (1.234 / 1,234):
+     binlik mi ondalık mı belirsiz; TR kuralı uygulanır ama kullanıcı uyarılır. */
+  function csvSayiCoz(metin) {
+    var t = String(metin == null ? "" : metin).trim().replace(/\s/g, "");
+    if (!t) return null;
+    var supheli = false;
+    var sv = t.lastIndexOf(","), sn = t.lastIndexOf(".");
+    if (sv > -1 && sn > -1) {
+      // İki ayraç birden: son görünen ondalıktır
+      t = (sv > sn) ? t.replace(/\./g, "").replace(/,/g, ".") : t.replace(/,/g, "");
+    } else if (sv > -1) {
+      var pv = t.split(",");
+      if (pv.length > 2) t = t.replace(/,/g, "");            // 1,234,567 → binlik
+      else {                                                  // tek virgül → ondalık (TR)
+        if (pv[1] && pv[1].length === 3) supheli = true;      // "1,234" belirsiz
+        t = t.replace(",", ".");
+      }
+    } else if (sn > -1) {
+      var pn = t.split(".");
+      if (pn.length > 2) t = t.replace(/\./g, "");            // 1.234.567 → binlik
+      else if (pn[1] && pn[1].length === 3) {                 // "1.234" → TR binlik say, uyar
+        supheli = true;
+        t = t.replace(".", "");
+      }
+      // "10.5", "1234.56" → ondalık (dokunma)
+    }
+    var n = parseFloat(t);
+    return isFinite(n) ? { deger: t, supheli: supheli } : null;
+  }
+
   d.csvFaaliyetIceAktar = function (csvMetin) {
-    var sonuc = { eklenen: 0, atlanan: 0, hatalar: [] };
+    var sonuc = { eklenen: 0, atlanan: 0, hatalar: [], uyarilar: [] };
     if (!csvMetin || !csvMetin.trim()) { sonuc.hatalar.push("Boş dosya"); return sonuc; }
     var satirlar = csvMetin.split(/\r?\n/).filter(function (s) { return s.trim(); });
     if (satirlar.length < 2) { sonuc.hatalar.push("En az başlık + 1 veri satırı gerekir"); return sonuc; }
@@ -525,7 +598,10 @@ window.Depo = (function () {
     function hucreler(satir) {
       return satir.split(ayirici).map(function (h) { return h.trim().replace(/^"|"$/g, ""); });
     }
-    var basliklar = hucreler(satirlar[0]).map(function (h) { return h.toLocaleLowerCase("tr"); });
+    // Başlık normalizasyonu: Türkçe İ/I tuzağına düşme ("MIKTAR" da "MİKTAR" da eşleşsin)
+    var basliklar = hucreler(satirlar[0]).map(function (h) {
+      return h.replace(/İ/g, "i").replace(/I/g, "i").toLocaleLowerCase("tr").trim();
+    });
     function indeks(adlar) {
       for (var i = 0; i < adlar.length; i++) {
         var k = basliklar.indexOf(adlar[i]);
@@ -546,18 +622,28 @@ window.Depo = (function () {
     }
     for (var r = 1; r < satirlar.length; r++) {
       var h = hucreler(satirlar[r]);
-      var miktar = (h[iMiktar] || "").replace(/\./g, "").replace(",", "."); // TR sayı → nokta
-      if (!h[iKat] || !miktar || isNaN(parseFloat(miktar))) { sonuc.atlanan++; continue; }
+      var hamMiktar = h[iMiktar] || "";
+      var cozum = csvSayiCoz(hamMiktar);
+      if (!h[iKat] || !cozum) {
+        sonuc.atlanan++;
+        sonuc.uyarilar.push("Satır " + (r + 1) + " atlandı: " +
+          (!h[iKat] ? "kategori boş" : "miktar sayı olarak çözülemedi (“" + hamMiktar + "”)"));
+        continue;
+      }
+      if (cozum.supheli) {
+        sonuc.uyarilar.push("Satır " + (r + 1) + ": “" + hamMiktar + "” belirsiz biçim — " +
+          parseFloat(cozum.deger).toLocaleString("tr-TR") + " olarak okundu; yanlışsa kaydı düzeltin.");
+      }
       var kayit = {
         no: d.yeniNo("F"),
         tesis: iTesis > -1 ? h[iTesis] : "(CSV içe aktarım)",
         kategori: h[iKat],
         kaynak: iKaynak > -1 ? h[iKaynak] : "",
-        miktar: miktar,
+        miktar: cozum.deger,
         birim: iBirim > -1 ? h[iBirim] : "",
         donem: iDonem > -1 ? h[iDonem] : "",
         aciklama: (iAcik > -1 ? h[iAcik] : "") + " [CSV içe aktarım]",
-        bolge: "TR"
+        bolge: "Other1"
       };
       d.veri.faaliyet.push(kayit);
       sonuc.eklenen++;

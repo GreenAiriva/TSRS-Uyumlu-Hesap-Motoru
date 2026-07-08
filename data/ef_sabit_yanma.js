@@ -2,6 +2,11 @@
    SABİT YANMA EMİSYON FAKTÖRLERİ (IPCC 2006)
    ------------------------------------------------------------
    Kazan, jeneratör vb. sabit ekipmanlarda yakılan yakıtların emisyon faktörleri.
+   KAYNAK: GHG Protocol "Emission Factors for Cross-Sector Tools" V2.0,
+   Stationary Combustion Tablo 1-3 (IPCC 2006 tabanlı). Yoğunluklar da aynı
+   tablodandır — örn. Gas/Diesel oil 0,913280524 kg/L araçtaki değerin birebir
+   kendisidir (API gravity dönüşümü, araç dipnot 1-2). Değerleri değiştirmeden
+   önce bu araçla karşılaştırın: "IPCC Kaynak Excel Araçları" klasörü.
    NASIL DÜZENLENİR?
    • En kolay yol: Uygulamayı açın → Yönetim Paneli → ilgili tabloyu
      görsel olarak düzenleyin. Kod bilgisi gerekmez.
@@ -476,7 +481,8 @@ VERI.ef_sabit_yanma = [
   "CO2_kg_per_tonne": 2692.8,
   "CH4_kg_per_tonne": 0.24,
   "N2O_kg_per_tonne": 0.0048,
-  "Liquid_Density_kg_per_L": null
+  "Liquid_Density_kg_per_L": null,
+  "Gas_Density_kg_per_m3": 0.7
  },
  {
   "Fuel_Name": "Municipal waste (Non biomass fraction)",

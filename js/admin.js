@@ -30,13 +30,22 @@ window.Admin = (function () {
   ];
 
   function kopya(x) { return JSON.parse(JSON.stringify(x)); }
+  /* Hücre değerini sayıya çevirir; TR (1.234,56) ve EN (1,234.56) biçimlerini tanır.
+     Sayı olmayan metinler (yakıt adı vb.) olduğu gibi kalır. Eski sürüm tuzağı:
+     "1.234,56" NaN kalıp STRING kaydediliyor, motor bunu 1.234 okuyordu (~1000×). */
   function sayilastir(v) {
     if (typeof v !== "string") return v;
     var t = v.trim();
     if (t === "") return "";
-    var n = Number(t.replace(",", "."));
     /* baştaki sıfırlı kodları (örn. "07.29") sayıya çevirme */
-    return (isFinite(n) && !/^0\d/.test(t)) ? n : v;
+    if (/^0\d/.test(t)) return v;
+    var norm = t.replace(/\s/g, "");
+    if (norm.indexOf(",") > -1) {
+      if (norm.lastIndexOf(",") > norm.lastIndexOf(".")) norm = norm.replace(/\./g, "").replace(/,/g, ".");
+      else norm = norm.replace(/,/g, "");
+    }
+    var n = Number(norm);
+    return (isFinite(n) && norm !== "") ? n : v;
   }
 
   function yonetici() { return !!(window.Depo && Depo.aktifKullanici && Depo.aktifKullanici.rol === "admin"); }

@@ -16,7 +16,21 @@ window.Motor = (function () {
   var M3_L = 1000;
   var SCF_M3 = 0.028316846592;
 
-  function sayi(v) { var n = parseFloat(v); return isFinite(n) ? n : 0; }
+  /* Sayı çözümleyici — hem TR (1.234,56 / 10,5) hem EN (1,234.56 / 10.5) biçimini
+     güvenle çözer. parseFloat("1.234,56")=1.234 tuzağını önler. */
+  function sayi(v) {
+    if (typeof v === "string") {
+      var t = v.trim();
+      if (t.indexOf(",") > -1) {
+        if (t.lastIndexOf(",") > t.lastIndexOf(".")) t = t.replace(/\./g, "").replace(/,/g, ".");
+        else t = t.replace(/,/g, "");
+      }
+      v = t;
+    }
+    var n = parseFloat(v);
+    return isFinite(n) ? n : 0;
+  }
+  M.sayi = sayi;   // arayüz/depo/admin de aynı çözümleyiciyi kullansın
 
   /* ---- KIP (GWP) arama ---- */
   M.gwpBul = function (gazAdi) {
@@ -80,6 +94,8 @@ window.Motor = (function () {
      Her seçenek: { anahtar, etiket, kayit }
      ============================================================ */
   M.kaynakSecenekleri = function (kategori, bolge) {
+    // Listeden kaldırılan eski bölge değerleri (TR/Other2) — bölgesiz say, tüm setleri göster
+    if (bolge === "TR" || bolge === "Other2") bolge = null;
     var sec = [];
     function ekle(etiket, kayit) { sec.push({ anahtar: etiket, etiket: etiket, kayit: kayit }); }
 
@@ -88,9 +104,17 @@ window.Motor = (function () {
         if (r.Fuel_Name) ekle(r.Fuel_Name + "  [" + (r.Category || "—") + "]", r);
       });
     } else if (kategori === "Mobil Yanma - Yakıt") {
-      Depo.set("ef_mobil_yakit").forEach(function (r) {
+      var myTumu = Depo.set("ef_mobil_yakit");
+      myTumu.forEach(function (r) {
         if (bolge && r.Region !== bolge) return;
+        // Karışım yakıtın (E85/B20) biyojenik bileşen satırı ayrıca listelenmez;
+        // fosil satırı seçilince biyojenik payı hesapta otomatik eklenir.
+        if (r.Notes === "Biogenic" && myTumu.some(function (x) {
+          return x !== r && x.Region === r.Region && x.Fuel === r.Fuel &&
+                 x.Vehicle_Engine_Type === r.Vehicle_Engine_Type && x.Notes === "Fossil";
+        })) return;
         var et = (r.Fuel || "") + (r.Vehicle_Engine_Type ? " — " + r.Vehicle_Engine_Type : "") +
+                 (r.Notes === "Biogenic" ? " (%100 biyojenik)" : "") +
                  (bolge ? "" : "  [" + r.Region + "]");
         ekle(et, r);
       });
@@ -126,15 +150,20 @@ window.Motor = (function () {
     // bölge değişmiş olabilir; bölgesiz ara
     sec = M.kaynakSecenekleri(kategori, null);
     for (var j = 0; j < sec.length; j++) if (sec[j].anahtar === anahtar) return sec[j].kayit;
+    // etiket eki değişmiş eski kayıtlar (örn. "(%100 biyojenik)" eki öncesi)
+    function sade(x) { return String(x || "").replace(" (%100 biyojenik)", "").trim(); }
+    for (var k = 0; k < sec.length; k++) if (sade(sec[k].anahtar) === sade(anahtar)) return sec[k].kayit;
     return null;
   };
 
   /* ============================================================
      FAALİYET SATIRI HESABI (Kapsam 1 ve 3)
-     Dönen: { tco2e, co2kg, ch4kg, n2okg, aciklama, hata }
+     Dönen: { tco2e, co2kg, ch4kg, n2okg, biyoCo2kg, aciklama, hata }
+     biyoCo2kg: biyojenik CO2 (GHG Protokolü gereği kapsam DIŞI, ayrı
+     raporlanır; tco2e'ye ve kapsam toplamlarına DAHİL EDİLMEZ).
      ============================================================ */
   M.hesapFaaliyet = function (s) {
-    var bos = { tco2e: 0, co2kg: 0, ch4kg: 0, n2okg: 0, aciklama: "", hata: null };
+    var bos = { tco2e: 0, co2kg: 0, ch4kg: 0, n2okg: 0, biyoCo2kg: 0, aciklama: "", hata: null };
     var miktar = sayi(s.miktar);
     if (!s.kategori) return Object.assign(bos, { hata: "Kategori seçilmedi" });
     if (!miktar) return Object.assign(bos, { hata: "Miktar girilmedi" });
@@ -142,7 +171,7 @@ window.Motor = (function () {
     // Manuel EF girilmişse her kategoride doğrudan kullanılır
     if (sayi(s.manuelEF) > 0) {
       var t = miktar * sayi(s.manuelEF) / 1000;
-      return { tco2e: t, co2kg: t * 1000, ch4kg: 0, n2okg: 0,
+      return { tco2e: t, co2kg: t * 1000, ch4kg: 0, n2okg: 0, biyoCo2kg: 0,
                aciklama: "Manuel EF: " + s.manuelEF + " kg CO2e/" + (s.birim || "birim"), hata: null };
     }
 
@@ -156,12 +185,27 @@ window.Motor = (function () {
     var kayit = M.kaynakKaydi(kat, s.bolge, s.kaynak);
     if (!kayit) return Object.assign(bos, { hata: "Kaynak (yakıt/araç) seçilmedi" });
 
-    var co2kg = 0, ch4kg = 0, n2okg = 0, ef, kts;
+    var co2kg = 0, ch4kg = 0, n2okg = 0, biyoCo2kg = 0, ef, kts;
     if (kat === "Mobil Yanma - Yakıt") {
       kts = birimKatsayi(s.birim, kayit.EF_Unit);
       if (kts == null) return Object.assign(bos, { hata: "Birim (" + s.birim + ") bu EF ile uyumsuz: " + kayit.EF_Unit });
       var m = miktar * kts;
-      co2kg = m * efKg(kayit.CO2_EF, kayit.EF_Unit);
+      if (kayit.Notes === "Biogenic") {
+        // %100 biyoyakıt: CO2'si kapsam dışı (biyojenik), CH4/N2O Kapsam 1'de kalır
+        biyoCo2kg = m * efKg(kayit.CO2_EF, kayit.EF_Unit);
+      } else {
+        co2kg = m * efKg(kayit.CO2_EF, kayit.EF_Unit);
+        // Karışım yakıt (E85/B20): araçta aynı yakıtın biyojenik satırı varsa payı otomatik eklenir
+        var esler = Depo.set("ef_mobil_yakit");
+        for (var bi = 0; bi < esler.length; bi++) {
+          var bx = esler[bi];
+          if (bx !== kayit && bx.Notes === "Biogenic" && bx.Region === kayit.Region &&
+              bx.Fuel === kayit.Fuel && bx.Vehicle_Engine_Type === kayit.Vehicle_Engine_Type) {
+            biyoCo2kg = m * efKg(bx.CO2_EF, bx.EF_Unit || kayit.EF_Unit);
+            break;
+          }
+        }
+      }
       ch4kg = m * efKg(kayit.CH4_EF, "g/x");   // EPA tablosunda g cinsinden
       n2okg = m * efKg(kayit.N2O_EF, "g/x");
       ef = kayit.CO2_EF + " " + kayit.EF_Unit;
@@ -177,13 +221,14 @@ window.Motor = (function () {
       ef = co2ef + " " + co2u;
     }
     var tco2e = (co2kg * 1 + ch4kg * M.gwpCH4() + n2okg * M.gwpN2O()) / 1000;
-    return { tco2e: tco2e, co2kg: co2kg, ch4kg: ch4kg, n2okg: n2okg,
-             aciklama: "EF: " + ef + " (DEFRA/EPA)", hata: null };
+    return { tco2e: tco2e, co2kg: co2kg, ch4kg: ch4kg, n2okg: n2okg, biyoCo2kg: biyoCo2kg,
+             aciklama: "EF: " + ef + " (GHG Protokol Cross-Sector aracı)" +
+                       (biyoCo2kg ? " • biyojenik CO2 ayrı izlenir" : ""), hata: null };
   };
 
-  /* Sabit yanma: IPCC 2006 — kütle (t/kg), hacim (L) veya enerji (GJ/kWh/MWh) */
+  /* Sabit yanma: IPCC 2006 — kütle (t/kg), hacim (L/m³) veya enerji (GJ/kWh/MWh) */
   function hesapSabit(s, miktar) {
-    var bos = { tco2e: 0, co2kg: 0, ch4kg: 0, n2okg: 0, aciklama: "", hata: null };
+    var bos = { tco2e: 0, co2kg: 0, ch4kg: 0, n2okg: 0, biyoCo2kg: 0, aciklama: "", hata: null };
     var kayit = M.kaynakKaydi("Sabit Yanma", null, s.kaynak);
     if (!kayit) return Object.assign(bos, { hata: "Yakıt seçilmedi" });
     var b = (s.birim || "tonne").toLowerCase();
@@ -194,6 +239,12 @@ window.Motor = (function () {
       var yog = sayi(kayit.Liquid_Density_kg_per_L);
       if (!yog) return Object.assign(bos, { hata: "Bu yakıt için yoğunluk (kg/L) tanımlı değil; tonne girin" });
       ton = miktar * yog / 1000;
+    }
+    else if (b === "m3" || b === "m³") {
+      // Gaz yakıtlar (doğal gaz faturası m³): araçtaki gaz yoğunluğu (kg/m³) ile kütleye çevrilir
+      var gazYog = sayi(kayit.Gas_Density_kg_per_m3);
+      if (!gazYog) return Object.assign(bos, { hata: "Bu yakıt için m³ yoğunluğu tanımlı değil; tonne veya kWh girin" });
+      ton = miktar * gazYog / 1000;
     }
     else if (b === "gj") tj = miktar / 1000;
     else if (b === "kwh") tj = miktar * 3.6e-6;
@@ -210,9 +261,15 @@ window.Motor = (function () {
     var n2okg = tj * sayi(kayit.N2O_kg_per_TJ);
     // CO2 kg/TJ boşsa kütle bazlı yedek
     if (!co2kg && ton != null && sayi(kayit.CO2_kg_per_tonne)) co2kg = ton * sayi(kayit.CO2_kg_per_tonne);
+    // Biyokütle yakıtların CO2'si biyojeniktir: kapsam dışı ayrı raporlanır (GHG Protokolü).
+    // İstisna: Turba (Peat) — IPCC 2006 turbayı CO2 muhasebesinde fosil gibi sayar.
+    var biyoCo2kg = 0;
+    if ((kayit.Category || "") === "Biomass" && kayit.Fuel_Name !== "Peat") {
+      biyoCo2kg = co2kg; co2kg = 0;
+    }
     var tco2e = (co2kg + ch4kg * M.gwpCH4() + n2okg * M.gwpN2O()) / 1000;
-    return { tco2e: tco2e, co2kg: co2kg, ch4kg: ch4kg, n2okg: n2okg, enerjiGJ: tj * 1000,
-             aciklama: "IPCC 2006 — NCV " + ncv + " TJ/Gg", hata: null };
+    return { tco2e: tco2e, co2kg: co2kg, ch4kg: ch4kg, n2okg: n2okg, biyoCo2kg: biyoCo2kg, enerjiGJ: tj * 1000,
+             aciklama: "IPCC 2006 — NCV " + ncv + " TJ/Gg" + (biyoCo2kg ? " • biyojenik CO2 ayrı izlenir" : ""), hata: null };
   }
 
   /* ============================================================
@@ -252,7 +309,7 @@ window.Motor = (function () {
     return Depo.set("ef_elektrik").map(function (r) { return r.Region; });
   };
   M.hesapElektrik = function (s) {
-    var sonuc = { ld: 0, pd: 0, sebekeEF: 0, hata: null };
+    var sonuc = { ld: 0, pd: 0, sebekeEF: 0, co2kg: 0, ch4kg: 0, n2okg: 0, hata: null };
     var kwh = sayi(s.kwh);
     if (!kwh) { sonuc.hata = "Tüketim (kWh) girilmedi"; return sonuc; }
     var tablo = Depo.set("ef_elektrik"), g = null;
@@ -263,6 +320,10 @@ window.Motor = (function () {
                 sayi(g.N2O_EF_kg_per_kWh) * M.gwpN2O();
     sonuc.sebekeEF = efKwh;
     sonuc.ld = kwh * efKwh / 1000;
+    // Gaz bazlı kütle dökümü (lokasyona dayalı) — rapor 5.1 gaz tablosuyla tutarlılık için
+    sonuc.co2kg = kwh * sayi(g.CO2_EF_kg_per_kWh);
+    sonuc.ch4kg = kwh * sayi(g.CH4_EF_kg_per_kWh);
+    sonuc.n2okg = kwh * sayi(g.N2O_EF_kg_per_kWh);
     var rec = Math.min(sayi(s.recKwh), kwh);
     var tedarikEF = sayi(s.tedarikciEF);
     var kalan = kwh - rec;
@@ -293,6 +354,7 @@ window.Motor = (function () {
       k2: { ld: 0, pd: 0, isi: 0, kwh: 0, recKwh: 0 },
       k3: { yukYukari: 0, yukAsagi: 0, seyahat: 0, ulasim: 0, diger: 0, toplam: 0 },
       gaz: { co2kg: 0, ch4kg: 0, n2okg: 0, fgazkg: 0, fgazTco2e: 0 },
+      biyojenik: { co2kg: 0, tco2: 0 },   // kapsam DIŞI, ayrı raporlanır
       enerji: { yakitGJ: 0, elektrikGJ: 0, toplamGJ: 0 },
       hatalar: []
     };
@@ -300,6 +362,7 @@ window.Motor = (function () {
       var h = M.hesapFaaliyet(s);
       if (h.hata) { T.hatalar.push((s.no || "?") + ": " + h.hata); return; }
       T.gaz.co2kg += h.co2kg; T.gaz.ch4kg += h.ch4kg; T.gaz.n2okg += h.n2okg;
+      T.biyojenik.co2kg += sayi(h.biyoCo2kg);
       var kat = s.kategori;
       if (kat === "Sabit Yanma") { T.k1.sabit += h.tco2e; if (h.enerjiGJ) T.enerji.yakitGJ += h.enerjiGJ; }
       else if (kat === "Mobil Yanma - Yakıt" || kat === "Mobil Yanma - Mesafe") T.k1.mobil += h.tco2e;
@@ -317,8 +380,11 @@ window.Motor = (function () {
       var h = M.hesapElektrik(s);
       if (h.hata) { T.hatalar.push((s.no || "?") + ": " + h.hata); return; }
       T.k2.ld += h.ld; T.k2.pd += h.pd;
+      // Kapsam 2 gazları da gaz tablosuna dahil (lokasyona dayalı) — 5.1 toplamıyla tutarlılık
+      T.gaz.co2kg += h.co2kg; T.gaz.ch4kg += h.ch4kg; T.gaz.n2okg += h.n2okg;
       T.k2.kwh += sayi(s.kwh); T.k2.recKwh += Math.min(sayi(s.recKwh), sayi(s.kwh));
     });
+    T.biyojenik.tco2 = T.biyojenik.co2kg / 1000;
     T.k1.toplam = T.k1.sabit + T.k1.mobil + T.k1.proses + T.k1.kacak;
     T.k3.toplam = T.k3.yukYukari + T.k3.yukAsagi + T.k3.seyahat + T.k3.ulasim + T.k3.diger;
     T.k2ld = T.k2.ld + T.k2.isi;
@@ -626,6 +692,7 @@ window.Motor = (function () {
       ozet: {
         kapsam1: T.k1.toplam, kapsam2_ld: T.k2ld, kapsam2_pd: T.k2pd, kapsam3: T.k3.toplam,
         toplam_ld: T.toplamLD, toplam_pd: T.toplamPD,
+        biyojenik_co2_t: T.biyojenik.tco2,   // kapsam dışı, ayrı raporlanır
         enerji_GJ: T.enerji.toplamGJ,
         yogunluk_fte: T.yogunlukFTE, yogunluk_hasilat: T.yogunlukHasilat
       },
@@ -840,6 +907,7 @@ window.Motor = (function () {
       { anahtar: "co2kg", etiket: "CO2 (kg)" },
       { anahtar: "ch4kg", etiket: "CH4 (kg)" },
       { anahtar: "n2okg", etiket: "N2O (kg)" },
+      { anahtar: "biyoCo2kg", etiket: "Biyojenik CO2 (kg, kapsam dışı)" },
       { anahtar: "tco2eLD", etiket: "tCO2e (Lokasyon)" },
       { anahtar: "tco2ePD", etiket: "tCO2e (Piyasa)" },
       { anahtar: "ef", etiket: "EF / Metodoloji" },
@@ -856,6 +924,7 @@ window.Motor = (function () {
         no: s.no || "", kapsam: kapsam, tip: "Faaliyet", ad: s.tesis || "", kategori: s.kategori || "",
         kaynak: kaynakAd, miktar: miktarSayi(s.miktar), birim: s.birim || "", donem: s.donem || "", bolge: s.bolge || "",
         co2kg: h.hata ? "" : h.co2kg, ch4kg: h.hata ? "" : h.ch4kg, n2okg: h.hata ? "" : h.n2okg,
+        biyoCo2kg: h.hata ? "" : (h.biyoCo2kg || ""),
         tco2eLD: h.hata ? "" : h.tco2e, tco2ePD: h.hata ? "" : h.tco2e,
         ef: h.hata ? "" : (h.aciklama || ""), durum: h.hata ? ("Hata: " + h.hata) : "Hesaplandı"
       });
@@ -865,7 +934,7 @@ window.Motor = (function () {
       satirlar.push({
         no: s.no || "", kapsam: 1, tip: "Soğutucu/Kaçak", ad: s.ekipman || "", kategori: "Kaçak Emisyon (F-gaz)",
         kaynak: s.gaz || "", miktar: h.hata ? "" : h.kacakKg, birim: "kg (kaçak)", donem: s.donem || "", bolge: s.bolge || "",
-        co2kg: "", ch4kg: "", n2okg: "", tco2eLD: h.hata ? "" : h.tco2e, tco2ePD: h.hata ? "" : h.tco2e,
+        co2kg: "", ch4kg: "", n2okg: "", biyoCo2kg: "", tco2eLD: h.hata ? "" : h.tco2e, tco2ePD: h.hata ? "" : h.tco2e,
         ef: h.hata ? "" : ("KIP " + M.fmt(h.gwp, 0) + " • " + (s.yontem || "")), durum: h.hata ? ("Hata: " + h.hata) : "Hesaplandı"
       });
     });
@@ -875,7 +944,8 @@ window.Motor = (function () {
       satirlar.push({
         no: s.no || "", kapsam: 2, tip: "Elektrik", ad: s.tesis || "", kategori: "Satın Alınan Elektrik",
         kaynak: s.sebeke || "", miktar: miktarSayi(s.kwh), birim: "kWh", donem: s.donem || "", bolge: s.sebeke || "",
-        co2kg: "", ch4kg: "", n2okg: "", tco2eLD: h.hata ? "" : h.ld, tco2ePD: h.hata ? "" : h.pd,
+        co2kg: h.hata ? "" : h.co2kg, ch4kg: h.hata ? "" : h.ch4kg, n2okg: h.hata ? "" : h.n2okg,
+        biyoCo2kg: "", tco2eLD: h.hata ? "" : h.ld, tco2ePD: h.hata ? "" : h.pd,
         ef: efMetin, durum: h.hata ? ("Hata: " + h.hata) : "Hesaplandı"
       });
     });

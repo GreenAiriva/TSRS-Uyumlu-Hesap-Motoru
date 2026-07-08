@@ -26,7 +26,10 @@ VERI.listeler = {
  "elektrik_yaklasimi": ["Lokasyona Dayalı", "Piyasaya Dayalı"],
  "sozlesme_turu": ["Şebeke (standart)", "Yeşil Tarife", "REC / I-REC", "İkili Anlaşma (PPA)", "Yerinde Üretim"],
  "dogrulama_durumu": ["Doğrulanmamış", "Sınırlı Güvence", "Makul Güvence"],
- "bolge": ["TR", "UK", "US", "Other1", "Other2"],
+ /* EF tablolarındaki bölge/kaynak setleri (GHG Protokol Cross-Sector aracı):
+    Other1 = IPCC 2006 genel değerleri (bölgeden bağımsız — TR için de bunu kullanın),
+    UK = DEFRA, US = EPA. Coğrafi bölge DEĞİL, EF kaynak seti seçimidir. */
+ "bolge": ["Other1", "UK", "US"],
  "evet_hayir": ["Evet", "Hayır"],
  "veri_kalitesi": ["Birincil (ölçüm/fatura)", "İkincil (hesaplama)", "Tahmin"],
  "ekipman_turu": [
@@ -34,8 +37,11 @@ VERI.listeler = {
   "Split AC / Heat Pump",
   "VRF System",
   "Commercial Refrigeration",
+  "Stand-Alone Commercial Refrigeration",
+  "Domestic Refrigeration",
   "Refrigerated Transport",
   "Industrial Refrigeration",
+  "Mobile Air Conditioning",
   "Fire Suppression",
   "Diğer"
  ],
@@ -82,8 +88,8 @@ VERI.listeler = {
   "Raporlamayı finansal raporla eş zamanlı yayımlamama (ilk yıl zamanlama muafiyeti)"
  ],
  "birimler": {
-  "Sabit Yanma": ["tonne", "kg", "L", "GJ", "kWh", "MWh"],
-  "Mobil Yanma - Yakıt": ["L", "US Gallon"],
+  "Sabit Yanma": ["tonne", "kg", "L", "m3", "GJ", "kWh", "MWh"],
+  "Mobil Yanma - Yakıt": ["L", "US Gallon", "m3", "scf"],
   "Mobil Yanma - Mesafe": ["km", "mil"],
   "Proses Emisyonları": ["tonne", "kg"],
   "Satın Alınan Isı/Buhar": ["kWh", "MWh", "GJ"],

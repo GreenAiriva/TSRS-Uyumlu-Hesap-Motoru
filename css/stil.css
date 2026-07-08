@@ -50,7 +50,7 @@ a:hover{text-decoration:underline}
 .marka .alt{font-size:10.5px;color:#A9ADA8;letter-spacing:.4px;line-height:1.4}
 .kenar nav{padding:10px 0 24px;flex:1}
 .nav-grup{margin-top:14px}
-.nav-grup .grup-ad{font-size:10px;letter-spacing:1.6px;text-transform:uppercase;color:#8A9089;padding:4px 18px 6px}
+.nav-grup .grup-ad{font-size:10px;letter-spacing:1.6px;text-transform:uppercase;color:#AEB4AD;padding:4px 18px 6px}   /* AA kontrast */
 .nav-link{display:flex;align-items:center;gap:9px;padding:7px 18px;color:#D5D6D2;font-size:13.5px;border-left:3px solid transparent;cursor:pointer}
 .nav-link:hover{background:rgba(255,255,255,.05);text-decoration:none;color:#fff}
 .nav-link.aktif{background:rgba(180,100,45,.16);border-left-color:var(--bakir);color:#fff}
@@ -58,7 +58,7 @@ a:hover{text-decoration:underline}
 .nav-link .nokta.tam{background:var(--malakit)}
 .nav-link .nokta.kismi{background:var(--altin)}
 .nav-link .ikon{width:17px;text-align:center;flex:none;opacity:.85}
-.kenar .surum{padding:12px 18px;font-size:10.5px;color:#7C827D;border-top:1px solid rgba(255,255,255,.08)}
+.kenar .surum{padding:12px 18px;font-size:10.5px;color:#A5ABA4;border-top:1px solid rgba(255,255,255,.08)}   /* AA kontrast */
 
 .icerik{min-width:0;display:flex;flex-direction:column}
 .ust-bar{background:var(--yuzey);border-bottom:1px solid var(--cizgi);padding:0}
@@ -147,7 +147,7 @@ table.veri .co2e{font-weight:600;color:var(--antrasit)}
 /* ---- Rozetler ---- */
 .rozet{display:inline-block;font-size:11px;font-weight:600;padding:2px 9px;border-radius:20px;letter-spacing:.3px}
 .rozet.tam{background:#E2F1EC;color:var(--malakit)}
-.rozet.kismi{background:#F7EFD8;color:#8A6E14}
+.rozet.kismi{background:#F7EFD8;color:#6E5710}   /* AA kontrast için koyulaştırıldı */
 .rozet.bos{background:#EDEEEB;color:var(--soluk)}
 .rozet.uyari{background:#F8E8E4;color:var(--oksit)}
 .rozet.k1{background:#F4E5D8;color:#8A4B1F}.rozet.k2{background:#DDEFE9;color:#175D4B}.rozet.k3{background:#E4E8EC;color:#46535F}
@@ -176,6 +176,30 @@ table.veri .co2e{font-weight:600;color:var(--antrasit)}
 .bildirim .not{background:var(--antrasit);color:#fff;padding:11px 18px;border-radius:var(--radius);font-size:13px;
   box-shadow:var(--golge);border-left:4px solid var(--malakit);animation:gel .2s ease}
 .bildirim .not.hata{border-left-color:var(--oksit)}
+
+/* ---- Kalıcı uyarı şeridi (banner): kaybolmaz, kullanıcı aksiyon alana dek kalır ---- */
+.banner-kap{position:fixed;top:0;left:0;right:0;z-index:95;display:flex;flex-direction:column}
+.banner{display:flex;align-items:center;justify-content:space-between;gap:14px;flex-wrap:wrap;
+  background:#8F2F1F;color:#fff;padding:10px 20px;font-size:13px;box-shadow:0 2px 10px rgba(0,0,0,.25)}
+.banner .banner-metin{line-height:1.45}
+.banner .banner-dugmeler{display:flex;gap:8px;flex-wrap:wrap}
+.banner .btn{background:#fff;color:#8F2F1F;border:none}
+.banner .btn:hover{background:#F3E3DF}
+.banner .btn.ikincil{background:transparent;color:#fff;border:1px solid rgba(255,255,255,.5)}
+
+/* ---- Bulut kayıt durumu rozeti (üst bar) ---- */
+.kayit-rozet{font-size:11.5px;font-weight:600;padding:4px 10px;border-radius:20px;white-space:nowrap;letter-spacing:.2px}
+.kayit-rozet.tamam{background:#E2F1EC;color:#175D4B}
+.kayit-rozet.bekliyor{background:#F7EFD8;color:#6E5710}
+.kayit-rozet.hata{background:#F8E8E4;color:var(--oksit)}
+
+/* ---- Satır-içi form hatası ---- */
+.alan.alan-hatali input,.alan.alan-hatali select,.alan.alan-hatali textarea{
+  border-color:var(--oksit);box-shadow:0 0 0 3px rgba(179,64,46,.12)}
+.alan .hata-not{font-size:11px;color:var(--oksit);font-weight:600}
+
+/* ---- Yükleme dönencesi (auth ekranları) ---- */
+@keyframes kmspin{to{transform:rotate(360deg)}}
 
 /* ---- Grafikler ---- */
 .cubuk-grafik .cubuk-satir{display:grid;grid-template-columns:200px 1fr 90px;gap:10px;align-items:center;padding:5px 0;font-size:13px}
@@ -250,7 +274,9 @@ table.veri .co2e{font-weight:600;color:var(--antrasit)}
   .rapor-sayfa:last-child{page-break-after:auto}
   .rapor-sayfa table,.rapor-sayfa tr{break-inside:avoid}
   .rapor-sayfa thead{display:table-header-group}
-  .rapor-sayfa h1{break-before:page}
+  /* h1'e ayrıca break-before verilmez: her .rapor-sayfa zaten kendi sayfasında başlar
+     (page-break-after:always). Çift kural, kapak bölünmesi + yalnız şerit içeren
+     yetim sayfalar üretiyordu. */
   .rapor-kapak{break-before:auto;min-height:240mm}
   .rapor-sayfa h2,.rapor-sayfa h3{break-after:avoid}
   .rapor-anlat{orphans:3;widows:3}
@@ -268,4 +294,15 @@ table.veri .co2e{font-weight:600;color:var(--antrasit)}
   .govde{padding:16px 14px 50px}
   .ust-bar .ic{padding:12px 14px}
   .cubuk-grafik .cubuk-satir{grid-template-columns:120px 1fr 80px}
+  .rapor-sayfa{padding:26px 20px}
+}
+@media (max-width:640px){
+  .rapor-sayfa{padding:18px 12px;font-size:12.5px}
+  .rapor-sayfa h1{font-size:19px}
+  .rapor-kapak{min-height:60vh}
+  .cubuk-grafik .cubuk-satir{grid-template-columns:90px 1fr 70px;font-size:12px}
+  .halka-sar{gap:14px;justify-content:center}
+  .kpi-dizi{grid-template-columns:repeat(auto-fit,minmax(140px,1fr))}
+  .kayit-rozet{display:none}   /* dar ekranda üst barı sıkıştırmasın */
+  .banner{padding:9px 12px}
 }

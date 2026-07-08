@@ -63,6 +63,32 @@ window.App = (function () {
               : "background:#eaf5f1;color:#1F7A63;border:1px solid #c9e6dc") }, [govde]);
   }
 
+  /* Supabase'in İngilizce hata mesajlarını kullanıcıya Türkçe göster */
+  function trHata(msg) {
+    var m = String(msg || "");
+    var tablo = [
+      [/invalid login credentials/i, "E-posta veya şifre hatalı."],
+      [/email not confirmed/i, "E-posta adresiniz henüz doğrulanmamış."],
+      [/user already registered|already been registered/i, "Bu e-posta ile zaten bir hesap var; giriş yapmayı deneyin."],
+      [/password should be at least|at least 6 characters/i, "Şifre en az 6 karakter olmalı."],
+      [/new password should be different/i, "Yeni şifre eskisinden farklı olmalı."],
+      [/rate limit|too many requests|security purposes/i, "Çok fazla deneme yapıldı; lütfen biraz bekleyip yeniden deneyin."],
+      [/failed to fetch|networkerror|network request failed|load failed/i, "Sunucuya ulaşılamadı; internet bağlantınızı kontrol edin."],
+      [/invalid email/i, "Geçerli bir e-posta adresi girin."]
+    ];
+    for (var i = 0; i < tablo.length; i++) if (tablo[i][0].test(m)) return tablo[i][1];
+    return "İşlem tamamlanamadı: " + m;
+  }
+
+  function yukleniyor(metin) {
+    return el("div", { style: "text-align:center;padding:18px 0;color:" + SOLUK + ";font-size:13.5px" }, [
+      el("span", { class: "spin", style:
+        "display:inline-block;width:18px;height:18px;border:2px solid #cfccc3;border-top-color:" + YESIL +
+        ";border-radius:50%;vertical-align:-4px;margin-right:9px;animation:kmspin .8s linear infinite" }),
+      metin || "Yükleniyor…"
+    ]);
+  }
+
   /* ============================================================
      BOOTSTRAP
      ============================================================ */
@@ -75,25 +101,47 @@ window.App = (function () {
     }
     SB.auth.onAuthStateChange(function (olay) {
       if (olay === "SIGNED_OUT") App.girisEkrani();
+      if (olay === "PASSWORD_RECOVERY") App.yeniSifreEkrani();   // e-postadaki sıfırlama bağlantısıyla gelindi
     });
+    // Oturum denetlenirken boş beyaz ekran yerine yükleme göstergesi
+    kabuk(el("div", null, [marka(), yukleniyor("Oturum denetleniyor…")]));
     SB.auth.getSession().then(function (r) {
       var oturum = r.data && r.data.session;
       if (!oturum) { App.girisEkrani(); return; }
       App.profilYukleVeYonlendir();
+    })["catch"](function (e) {
+      App.hataEkrani("Oturum denetlenemedi: " + trHata(e && e.message), App.basla);
     });
   };
 
+  /* Geçici hata ekranı: yanlış "onay bekleniyor" yerine gerçek durumu söyler + yeniden dene */
+  App.hataEkrani = function (mesaj, tekrar) {
+    var dene = dugme("↻ Yeniden Dene");
+    dene.onclick = function () { if (tekrar) tekrar(); else location.reload(); };
+    var cikis = dugme("Çıkış Yap", "#5B6B7C");
+    cikis.onclick = function () { SB.auth.signOut()["catch"](function () {}); App.girisEkrani(); };
+    kabuk(el("div", null, [marka(), uyari(mesaj, true), dene, el("div", { style: "height:10px" }), cikis]));
+  };
+
   App.profilYukleVeYonlendir = function () {
+    kabuk(el("div", null, [marka(), yukleniyor("Profil yükleniyor…")]));
     SB.auth.getUser().then(function (u) {
       var kullanici = u.data && u.data.user;
       if (!kullanici) { App.girisEkrani(); return; }
       return SB.from("profiles").select("id,email,ad_soyad,rol,onayli")
         .eq("id", kullanici.id).single().then(function (q) {
+          // Sorgu HATASI onaysız kullanıcıyla karıştırılmaz: geçici hatada hata ekranı gösterilir
+          if (q.error) {
+            App.hataEkrani("Profil bilgisi alınamadı: " + trHata(q.error.message), App.profilYukleVeYonlendir);
+            return;
+          }
           profil = (q.data) ? q.data : { id: kullanici.id, email: kullanici.email, rol: "kullanici", onayli: false };
           Depo.aktifKullanici = profil;
           if (!profil.onayli) { App.onayBekleniyorEkrani(); return; }
           App.musteriSecimEkrani();
         });
+    })["catch"](function (e) {
+      App.hataEkrani("Bağlantı sorunu: " + trHata(e && e.message), App.profilYukleVeYonlendir);
     });
   };
 
@@ -118,7 +166,7 @@ window.App = (function () {
         if (s.length < 6) { mesajKap.appendChild(uyari("Şifre en az 6 karakter olmalı.", true)); bitti(); return; }
         SB.auth.signUp({ email: e, password: s, options: { data: { ad_soyad: ad.girdi.value.trim() } } })
           .then(function (r) {
-            if (r.error) { mesajKap.appendChild(uyari(r.error.message, true)); bitti(); return; }
+            if (r.error) { mesajKap.appendChild(uyari(trHata(r.error.message), true)); bitti(); return; }
             if (r.data.session) { App.profilYukleVeYonlendir(); }
             else {
               kabuk(el("div", null, [marka(),
@@ -130,13 +178,12 @@ window.App = (function () {
           });
       } else {
         SB.auth.signInWithPassword({ email: e, password: s }).then(function (r) {
-          if (r.error) { mesajKap.appendChild(uyari(r.error.message, true)); bitti(); return; }
+          if (r.error) { mesajKap.appendChild(uyari(trHata(r.error.message), true)); bitti(); return; }
           App.profilYukleVeYonlendir();
         });
       }
     }
-    sifre.girdi.addEventListener("keydown", function (ev) { if (ev.key === "Enter") gonder(); });
-    anaDugme.onclick = gonder;
+    anaDugme.type = "submit";   // form içinde Enter her alandan çalışsın
 
     var altLink = el("div", { style: "text-align:center;margin-top:16px;font-size:13px;color:" + SOLUK }, [
       kayitMi ? "Zaten hesabınız var mı? " : "Hesabınız yok mu? ",
@@ -144,9 +191,78 @@ window.App = (function () {
         onclick: function (ev) { ev.preventDefault(); App.girisEkrani(!kayitMi); } },
         [kayitMi ? "Giriş yapın" : "Kayıt olun"])
     ]);
+    var unutLink = kayitMi ? null : el("div", { style: "text-align:center;margin-top:10px;font-size:12.5px" }, [
+      el("a", { href: "#", style: "color:" + SOLUK + ";text-decoration:underline",
+        onclick: function (ev) { ev.preventDefault(); App.sifreSifirlaEkrani(ePosta.girdi.value.trim()); } },
+        ["Şifremi unuttum"])
+    ]);
 
-    kabuk(el("div", null, [marka(), mesajKap, ad, ePosta, sifre, anaDugme, altLink]));
+    // <form> öğesi: Enter ile gönderme + tarayıcı şifre yöneticisi uyumu
+    var form = el("form", { onsubmit: function (ev) { ev.preventDefault(); gonder(); } },
+      [mesajKap, ad, ePosta, sifre, anaDugme]);
+    kabuk(el("div", null, [marka(), form, unutLink, altLink]));
     ePosta.girdi.focus();
+  };
+
+  /* ============================================================
+     ŞİFRE SIFIRLAMA
+     1) sifreSifirlaEkrani: e-postaya sıfırlama bağlantısı gönderir
+     2) yeniSifreEkrani: bağlantıyla gelindiğinde (PASSWORD_RECOVERY) yeni şifre alır
+     ============================================================ */
+  App.sifreSifirlaEkrani = function (onDoluEposta) {
+    var ePosta = girdi("E-posta", "email", "username");
+    if (onDoluEposta) ePosta.girdi.value = onDoluEposta;
+    var mesajKap = el("div");
+    var gonderB = dugme("Sıfırlama Bağlantısı Gönder");
+    var form = el("form", { onsubmit: function (ev) {
+      ev.preventDefault();
+      var e = ePosta.girdi.value.trim();
+      mesajKap.innerHTML = "";
+      if (!e) { mesajKap.appendChild(uyari("E-posta adresinizi girin.", true)); return; }
+      gonderB.disabled = true; gonderB.textContent = "Gönderiliyor…";
+      SB.auth.resetPasswordForEmail(e, { redirectTo: location.origin + location.pathname }).then(function (r) {
+        gonderB.disabled = false; gonderB.textContent = "Sıfırlama Bağlantısı Gönder";
+        mesajKap.innerHTML = "";
+        if (r.error) { mesajKap.appendChild(uyari(trHata(r.error.message), true)); return; }
+        mesajKap.appendChild(uyari("Sıfırlama bağlantısı e-postanıza gönderildi. Gelen kutunuzu " +
+          "(ve gereksiz/spam klasörünü) kontrol edin; bağlantı sizi yeni şifre ekranına getirecek."));
+      });
+    } }, [mesajKap, ePosta, gonderB]);
+    gonderB.type = "submit";
+    var geri = el("div", { style: "text-align:center;margin-top:16px;font-size:13px" }, [
+      el("a", { href: "#", style: "color:" + YESIL + ";font-weight:600;text-decoration:none",
+        onclick: function (ev) { ev.preventDefault(); App.girisEkrani(); } }, ["← Giriş ekranına dön"])
+    ]);
+    kabuk(el("div", null, [marka(), form, geri]));
+    ePosta.girdi.focus();
+  };
+
+  App.yeniSifreEkrani = function () {
+    var s1 = girdi("Yeni Şifre (en az 6 karakter)", "password", "new-password");
+    var s2 = girdi("Yeni Şifre (tekrar)", "password", "new-password");
+    var mesajKap = el("div");
+    var kaydetB = dugme("Şifreyi Güncelle");
+    var form = el("form", { onsubmit: function (ev) {
+      ev.preventDefault();
+      mesajKap.innerHTML = "";
+      var a = s1.girdi.value, b = s2.girdi.value;
+      if (a.length < 6) { mesajKap.appendChild(uyari("Şifre en az 6 karakter olmalı.", true)); return; }
+      if (a !== b) { mesajKap.appendChild(uyari("Şifreler birbiriyle aynı değil.", true)); return; }
+      kaydetB.disabled = true; kaydetB.textContent = "Güncelleniyor…";
+      SB.auth.updateUser({ password: a }).then(function (r) {
+        kaydetB.disabled = false; kaydetB.textContent = "Şifreyi Güncelle";
+        mesajKap.innerHTML = "";
+        if (r.error) { mesajKap.appendChild(uyari(trHata(r.error.message), true)); return; }
+        var devam = dugme("Uygulamaya devam et");
+        devam.onclick = function () { App.profilYukleVeYonlendir(); };
+        kabuk(el("div", null, [marka(), uyari("Şifreniz güncellendi."), devam]));
+      });
+    } }, [mesajKap, s1, s2, kaydetB]);
+    kaydetB.type = "submit";
+    kabuk(el("div", null, [marka(),
+      el("p", { style: "text-align:center;color:" + SOLUK + ";font-size:13px;margin:0 0 14px" },
+        ["Hesabınız için yeni bir şifre belirleyin."]), form]));
+    s1.girdi.focus();
   };
 
   /* ============================================================
@@ -214,8 +330,19 @@ window.App = (function () {
     k.appendChild(ustBar);
     k.appendChild(icerik);
 
-    Depo.musteriListele().then(function (musteriler) {
+    Depo.musteriListele().then(function (sonuc) {
       liste.innerHTML = "";
+      // Ağ/yetki hatası "boş liste" ile karıştırılmaz: yeniden-dene kartı gösterilir
+      if (sonuc.hata) {
+        var dene = el("button", { class: "btn birincil kucuk", type: "button", style: "margin-top:12px" }, ["↻ Yeniden Dene"]);
+        dene.onclick = function () { App.musteriSecimEkrani(); };
+        liste.appendChild(el("div", { style:
+          "grid-column:1/-1;padding:32px;text-align:center;color:#92302a;border:1px solid #f3c9c4;background:#fcebe9;border-radius:12px" },
+          [el("div", { style: "margin-bottom:6px;font-weight:600" }, ["Müşteri listesi alınamadı"]),
+           el("div", { style: "font-size:12.5px" }, [trHata(sonuc.hata)]), dene]));
+        return;
+      }
+      var musteriler = sonuc.satirlar;
       if (!musteriler.length) {
         liste.appendChild(el("div", { style:
           "grid-column:1/-1;padding:40px;text-align:center;color:" + SOLUK + ";border:2px dashed #ddd9cf;border-radius:12px" },
@@ -224,7 +351,7 @@ window.App = (function () {
       }
       musteriler.forEach(function (m) {
         var ac = el("button", { class: "btn birincil kucuk", type: "button" }, ["Aç →"]);
-        ac.onclick = function () { App.musteriAc(m.id); };
+        ac.onclick = function () { App.musteriAc(m.id, ac); };
         var dugmeler = [ac];
         if (profil.rol === "admin") {
           var sil = el("button", { class: "btn tehlike kucuk", type: "button" }, ["Sil"]);
@@ -270,12 +397,17 @@ window.App = (function () {
     ], 640);
   };
 
-  App.musteriAc = function (id) {
+  App.musteriAc = function (id, dugmeEl) {
+    // Açılırken düğme tepkisiz görünmesin: durum bildirilir
+    if (dugmeEl) { dugmeEl.disabled = true; dugmeEl.textContent = "Açılıyor…"; }
     Depo.yukle(id).then(function () {
       App.uygulamaGoster();
       Depo.gercekZamanliIzle(id, App.uzaktanGuncelleme);   // eşzamanlı düzenleme farkındalığı
       UI.bildir("Müşteri açıldı");
-    }).catch(function (e) { UI.bildir("Müşteri açılamadı: " + (e.message || e), true); });
+    }).catch(function (e) {
+      if (dugmeEl) { dugmeEl.disabled = false; dugmeEl.textContent = "Aç →"; }
+      UI.bildir("Müşteri açılamadı: " + trHata(e.message || e), true);
+    });
   };
 
   /* Başka bir kullanıcı açık müşteriyi güncellediğinde çağrılır (Realtime) */
