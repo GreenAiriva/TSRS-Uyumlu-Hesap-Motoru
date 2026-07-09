@@ -1,0 +1,109 @@
+================================================================
+  KARBON AYAK İZİ HESAP MOTORU — WEB UYGULAMASI (Sürüm 3.0)
+  TSRS 1 & 2 Uyumlu • GHG Protokolü • IPCC AR6 • Madencilik Özel
+================================================================
+
+NASIL AÇILIR?
+-------------
+"index.html" dosyasına ÇİFT TIKLAYIN. Uygulama tarayıcınızda
+(Chrome / Edge / Firefox) açılır. İnternet bağlantısı GEREKMEZ,
+kurulum GEREKMEZ. Kolaylık için index.html'in kısayolunu
+masaüstüne atabilirsiniz.
+
+KLASÖR YAPISI (kategorik ayrıştırılmış kaynaklar)
+-------------------------------------------------
+index.html ........ Uygulamayı açan tek dosya
+BENI_OKU.txt ...... Bu kılavuz
+css/stil.css ...... Tüm görsel tasarım (renkler, yazılar)
+js/ ............... Uygulama mantığı (normalde dokunulmaz)
+   depo.js ........ Verilerin saklanması ve yedekleme
+   motor.js ....... Emisyon hesaplama formülleri
+   arayuz.js ...... Sayfalar ve formlar
+   panel.js ....... Gösterge paneli
+   rapor.js ....... Yazdırılabilir rapor
+   admin.js ....... Yönetim paneli
+data/ ............. DÜZENLENEBİLİR veriler (kategorilere ayrılmış)
+   ayarlar.js ............ Başlıklar, metodoloji beyanı, metinler
+   listeler.js ........... Tüm açılır liste seçenekleri
+   tsrs_modulleri.js ..... TSRS form alanı tanımları
+   kip_ar6.js ............ Küresel Isınma Potansiyelleri (GWP)
+   ef_sabit_yanma.js ..... Sabit yanma emisyon faktörleri (IPCC)
+   ef_mobil_yakit.js ..... Araç yakıt bazlı faktörler
+   ef_mobil_mesafe.js .... Araç mesafe bazlı faktörler
+   ef_tasimacilik.js ..... Yük taşımacılığı faktörleri
+   ef_toplu_tasima.js .... Toplu taşıma / yolcu faktörleri
+   ef_elektrik.js ........ Elektrik şebeke faktörleri (TR dahil)
+   kacak_oranlari.js ..... Soğutucu gaz varsayılan kaçak oranları
+   yakit_ekonomisi.js .... Yakıt ekonomisi varsayılanları
+
+VERİLERİM NEREDE SAKLANIYOR?
+----------------------------
+Girdiğiniz her şey, YAZARKEN otomatik olarak tarayıcının kalıcı
+hafızasına kaydedilir. Bilgisayarı kapatsanız da kaybolmaz.
+ÖNEMLİ: Veriler tarayıcıya bağlıdır. Başka tarayıcı/bilgisayara
+geçecekseniz: Yönetim Paneli > Yedekleme > "JSON Yedeği İndir"
+deyin, yeni yerde "Yedekten Geri Yükle" ile dosyayı seçin.
+Düzenli yedek almanız önerilir.
+
+KOD BİLMEDEN NASIL DÜZENLEME YAPARIM?
+-------------------------------------
+Sol menüden YÖNETİM PANELİ'ne girin. Beş sekme vardır:
+
+1) EMİSYON FAKTÖRLERİ
+   Tabloyu seçin (örn. Elektrik Şebeke EF), arama kutusuyla satırı
+   bulun, "Düzenle"ye basıp değeri değiştirin. "+ Satır Ekle" ile
+   yeni yakıt/araç/gaz ekleyin. Değişiklik hesaplara ANINDA yansır.
+   "Varsayılana dön" ile orijinal değerlere dönebilirsiniz.
+
+2) AÇILIR LİSTELER
+   Formlardaki seçim kutularına seçenek ekleyin/çıkarın.
+   Her satıra bir seçenek yazıp "Kaydet" deyin.
+
+3) FORM ALANLARI
+   TSRS sayfalarına yeni tablo sütunu veya metin alanı ekleyin.
+   Eklediğiniz alan ilgili sayfada anında belirir.
+
+4) GÖRÜNÜM VE METİNLER
+   Uygulama adı, metodoloji beyanı, kılavuz adımları vb.
+
+5) YEDEKLEME
+   Yedek alma / geri yükleme / sıfırlama.
+
+DÜZENLEMELERİ KALICI YAPMAK (data/ klasörü yöntemi)
+---------------------------------------------------
+Yönetim Paneli'ndeki düzenlemeler SADECE o tarayıcıda saklanır.
+Düzenlemenin uygulamanın kendisine işlenmesini isterseniz:
+1) Emisyon Faktörleri sekmesinde tabloyu düzenleyin,
+2) "Kalıcı dosya indir" düğmesine basın,
+3) İnen dosyayı data/ klasöründeki AYNI ADLI dosyanın üzerine
+   kopyalayın (eskisini silmeden önce bir kopyasını saklayın).
+Artık bu düzenleme uygulamayı açan herkeste geçerlidir.
+
+data/ dosyalarını elle düzenlemek isterseniz: Not Defteri ile
+açın; her dosyanın başında "NASIL DÜZENLENİR" açıklaması vardır.
+Virgül ve tırnak işaretlerine dikkat edin. Bir hata olursa
+uygulama açılışta hangi dosyada sorun olduğunu söyler.
+
+GÜNLÜK KULLANIM (5 ADIM)
+------------------------
+1) Şirket Profili'ni doldurun (yıldızlı alanlar zorunlu).
+2) Faaliyet Verisi, Soğutucu/Kaçak ve Kapsam 2 Elektrik
+   sayfalarına kayıtlarınızı girin; tCO2e otomatik hesaplanır.
+3) TSRS Açıklamaları bölümündeki 10 modülü doldurun.
+4) Gösterge Paneli'nden sonuçları ve uyum durumunu izleyin.
+5) Envanter Raporu > "Yazdır / PDF Kaydet" ile A4 çıktı alın.
+
+Sol menüdeki renkli noktalar ilerlemenizi gösterir:
+yeşil = tamamlandı, sarı = devam ediyor, gri = başlanmadı.
+
+NOT: Soğutucu gaz tablosuna, IPCC AR6 saf gazlarına ek olarak
+sahada yaygın kullanılan karışımlar (R-410A, R-404A, R-407C vb.)
+AR6 bileşen değerlerinden hesaplanarak eklenmiştir.
+
+METODOLOJİ
+----------
+GHG Protokolü Kurumsal Standardı • IPCC 2006 (2019 günc.) •
+KIP'ler IPCC AR6 (100 yıl): CH4 fosil 29,8 / N2O 273 •
+Kapsam 2 ikili raporlama (Lokasyona + Piyasaya Dayalı) •
+Türkiye şebeke EF'leri: ETKB EVÇED 2023.
+================================================================

@@ -1,0 +1,60 @@
+# Git ignore — Karbon Motoru
+
+# ============================================================
+# MÜŞTERİ VERİSİ — ASLA repoda olmaz (hassas + büyük)
+# ============================================================
+input_cloud/
+output_cloud/
+
+# Mevcut TUREKS ve diğer şirket klasörleri (ana dizinde olsa bile)
+TUREKS/
+01_Kunye/
+02_Finansal_Raporlar/
+03_Surdurulebilirlik_Verileri/
+04_Data_Setler/
+05_Uretilen_Rapor_Bolumleri/
+
+# ============================================================
+# Üretilen raporlar (yerel çıktılar)
+# ============================================================
+RAPOR_CIKTILARI/
+*.pdf
+*.docx
+!docs/*.pdf
+!docs/*.docx
+
+# ============================================================
+# Geçici dosyalar / sistem
+# ============================================================
+.DS_Store
+Thumbs.db
+desktop.ini
+*.tmp
+*.swp
+*~
+~$*
+*.bak
+
+# ============================================================
+# Editör/IDE
+# ============================================================
+.vscode/
+.idea/
+*.code-workspace
+
+# ============================================================
+# Node (eğer ileride paket eklenirse)
+# ============================================================
+node_modules/
+package-lock.json
+yarn.lock
+npm-debug.log*
+
+# ============================================================
+# Yedek dosyaları
+# ============================================================
+*.backup
+*.old
+*-AutoRecovered.*
+*.xlsx
+!data-templates/*.xlsx

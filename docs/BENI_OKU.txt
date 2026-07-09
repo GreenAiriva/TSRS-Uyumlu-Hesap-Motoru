@@ -1,0 +1,26 @@
+DOCS — BELGELER VE KILAVUZLAR
+==============================
+
+Bu klasör; uygulamanın kullanımı, mevzuat referansları, geliştirici notları ve
+kullanıcı kılavuzlarının yer alacağı yerdir.
+
+PLANLANAN İÇERİK:
+-----------------
+• kullanici_kilavuzu.md          ← Adım adım veri girişi rehberi
+• gelistirici_notlari.md         ← Kod mimarisi ve katkıda bulunma
+• tsrs_referans_tablosu.md       ← Standart maddelerinin web app eşleştirmesi
+• sektor_ciltleri_haritasi.md    ← 53 cildin sektör → kod eşleştirmesi
+• ek_cilt_10_metrikleri.md       ← Madencilik özel detaylı tablo
+• degisiklik_gunlugu.md          ← Sürüm notları (CHANGELOG)
+• ss/                            ← Ekran görüntüleri (varsa)
+
+NASIL KATKIDA BULUNULUR:
+------------------------
+Buradaki dosyalar Markdown formatındadır. VS Code'da:
+1. Dosyayı aç
+2. Ctrl+Shift+V ile önizleme
+3. Düzenle
+4. git add . && git commit && git push
+
+Bu dosyalar GitHub'da görüntülenir (markdown render eder), ortakların referans
+için kullanabilir.
