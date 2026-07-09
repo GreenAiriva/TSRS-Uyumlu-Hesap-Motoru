@@ -294,6 +294,7 @@ window.Rapor = (function () {
       ])
     ]));
     var g = T.gaz, c4 = Motor.gwpCH4(), n2 = Motor.gwpN2O();
+    var gazToplamT = g.co2kg / 1000 + g.ch4kg * c4 / 1000 + g.n2okg * n2 / 1000 + g.fgazTco2e;
     sMet.appendChild(el("h3", { style: "margin:14px 0 2px;font-size:13px" }, ["Gaz Bazında Kütle ve CO2 Eşdeğeri (TSRS 2 md. 29(a)(i))"]));
     sMet.appendChild(el("table", null, [
       th(["Gaz", { t: "Kütle (kg)", sinif: "sayi" }, { t: "KIP (AR6 100 yıl)", sinif: "sayi" }, { t: "tCO2e", sinif: "sayi" }]),
@@ -301,9 +302,20 @@ window.Rapor = (function () {
         trS(["CO2", { sayi: Motor.fmt(g.co2kg, 1) }, { sayi: "1" }, { sayi: Motor.fmt(g.co2kg / 1000, 3) }]),
         trS(["CH4 (fosil)", { sayi: Motor.fmt(g.ch4kg, 3) }, { sayi: Motor.fmt(c4, 1) }, { sayi: Motor.fmt(g.ch4kg * c4 / 1000, 3) }]),
         trS(["N2O", { sayi: Motor.fmt(g.n2okg, 3) }, { sayi: Motor.fmt(n2, 0) }, { sayi: Motor.fmt(g.n2okg * n2 / 1000, 3) }]),
-        trS(["F-gazlar", { sayi: Motor.fmt(g.fgazkg, 3) }, { sayi: "gaza göre" }, { sayi: Motor.fmt(g.fgazTco2e, 3) }])
+        trS(["F-gazlar", { sayi: Motor.fmt(g.fgazkg, 3) }, { sayi: "gaza göre" }, { sayi: Motor.fmt(g.fgazTco2e, 3) }]),
+        trS([el("b", null, ["TOPLAM (Kapsam 1+2 LD+3)"]), { sayi: "" }, { sayi: "" }, { sayi: el("b", null, [Motor.fmt(gazToplamT, 3)]) }])
       ])
     ]));
+    sMet.appendChild(el("p", { style: "font-size:11px;color:var(--soluk);margin:4px 0 0" }, [
+      "Tablo, Kapsam 1 ve 3 yakıt kaynaklı gazlar ile Kapsam 2 (lokasyona dayalı) elektrik gazlarını içerir."]));
+    if (T.biyojenik && T.biyojenik.co2kg > 0) {
+      sMet.appendChild(el("p", { style: "margin:6px 0 0" }, [
+        el("b", null, ["Biyojenik CO2 (kapsamlar dışında ayrıca raporlanır): "]),
+        Motor.fmt(T.biyojenik.tco2, 3) + " tCO2 (" + Motor.fmt(T.biyojenik.co2kg, 1) + " kg). " +
+        "GHG Protokolü uyarınca biyokütle/biyoyakıt kaynaklı CO2, Kapsam 1-2-3 toplamlarına dahil edilmez; " +
+        "yakıtların CH4 ve N2O emisyonları Kapsam 1'e dahildir."
+      ]));
+    }
     sMet.appendChild(el("h3", { style: "margin:14px 0 2px;font-size:13px" }, ["Yoğunluk Göstergeleri"]));
     sMet.appendChild(el("table", null, [
       th(["Gösterge", { t: "Değer", sinif: "sayi" }]),

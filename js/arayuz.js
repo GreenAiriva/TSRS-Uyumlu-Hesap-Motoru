@@ -40,18 +40,116 @@ window.UI = (function () {
   /* ================= Bildirim (toast) ================= */
   UI.bildir = function (mesaj, hata) {
     var kap = document.querySelector(".bildirim");
-    if (!kap) { kap = el("div", { class: "bildirim" }); document.body.appendChild(kap); }
+    if (!kap) {
+      // aria-live: ekran okuyucular geçici bildirimleri de duysun
+      kap = el("div", { class: "bildirim", role: "status", "aria-live": "polite" });
+      document.body.appendChild(kap);
+    }
     var n = el("div", { class: "not" + (hata ? " hata" : "") }, [mesaj]);
     kap.appendChild(n);
     setTimeout(function () { n.style.opacity = "0"; n.style.transition = "opacity .3s"; }, 2200);
     setTimeout(function () { if (n.parentNode) n.parentNode.removeChild(n); }, 2600);
   };
 
-  /* ================= Modal pencere ================= */
+  /* ================= Kalıcı uyarı şeridi (banner) =================
+     Toast'ın aksine kullanıcı kapatana ya da sorun çözülene dek ekranda kalır.
+     Kayıt hatası / eşzamanlılık çakışması gibi KRİTİK durumlar için. */
+  UI.banner = function (id, mesaj, dugmeler) {
+    var kap = document.querySelector(".banner-kap");
+    if (!kap) { kap = el("div", { class: "banner-kap", role: "alert" }); document.body.appendChild(kap); }
+    UI.bannerKapat(id);
+    kap.appendChild(el("div", { class: "banner", "data-banner": id }, [
+      el("span", { class: "banner-metin" }, [mesaj]),
+      el("span", { class: "banner-dugmeler" },
+        (dugmeler || []).map(function (dg) {
+          return el("button", { class: "btn kucuk", type: "button",
+            onclick: function () { dg.tik(); } }, [dg.etiket]);
+        }).concat([el("button", { class: "btn kucuk ikincil", type: "button", "aria-label": "Uyarıyı kapat",
+          onclick: function () { UI.bannerKapat(id); } }, ["×"])]))
+    ]));
+  };
+  UI.bannerKapat = function (id) {
+    var b = document.querySelector('.banner[data-banner="' + id + '"]');
+    if (b && b.parentNode) b.parentNode.removeChild(b);
+  };
+
+  /* Eşzamanlılık çakışması: kurtarma seçenekli kalıcı uyarı (depo.js çağırır) */
+  UI.kayitCakismasi = function () {
+    UI.kayitDurumu("hata");
+    UI.banner("kayit-cakisma",
+      "Bu müşteri başka bir kullanıcı tarafından değiştirildi; son değişiklikleriniz buluta YAZILAMADI.",
+      [
+        { etiket: "⟳ Uzak sürümü getir", tik: function () {
+            UI.onayla("Buluttaki güncel veri yüklenecek; sizin kaydedilmemiş değişiklikleriniz KAYBOLACAK. Devam edilsin mi?", function () {
+              Depo.cakismaCoz("uzak").then(function (h) {
+                if (h) { UI.bildir(h, true); return; }
+                UI.bannerKapat("kayit-cakisma"); UI.bildir("Güncel veri yüklendi"); UI.ciz();
+                if (window.App && App.kenarAltligiEkle) App.kenarAltligiEkle();
+              });
+            });
+          } },
+        { etiket: "⬆ Benim verimi esas al", tik: function () {
+            UI.onayla("Diğer kullanıcının buluta yazdığı değişiklikler, SİZİN verinizle değiştirilecek. Devam edilsin mi?", function () {
+              Depo.cakismaCoz("uzerine").then(function (h) {
+                if (h) { UI.bildir(h, true); return; }
+                UI.bannerKapat("kayit-cakisma"); UI.bildir("Veriniz buluta yazıldı");
+              });
+            });
+          } }
+      ]);
+  };
+
+  /* Üst bardaki gerçek kayıt durumu rozeti (iyimser "Kaydedildi" yerine) */
+  var kayitRozet = null;
+  UI.kayitDurumu = function (durum) {
+    if (!kayitRozet) return;
+    var m = { kaydediliyor: ["Kaydediliyor…", "bekliyor"],
+              kaydedildi:   ["✓ Buluta kaydedildi", "tamam"],
+              hata:         ["! Kayıt sorunu", "hata"] }[durum];
+    if (!m) return;
+    kayitRozet.className = "kayit-rozet " + m[1];
+    kayitRozet.textContent = m[0];
+  };
+
+  /* ================= Modal pencere =================
+     - Formda değişiklik varken dış tıklama / Esc / × onay ister (veri kaybı önlenir)
+     - Enter (metin girdisinde) birincil düğmeyi tetikler → klavyeyle seri giriş
+     - Odak modal içinde tutulur (focus trap) ve kapanınca eski öğeye iade edilir
+     - Esc yalnız EN ÜSTTEKİ modalı kapatır (iç içe modallarda katman katman) */
   UI.modal = function (baslik, govde, dugmeler, genislik) {
     var fon = el("div", { class: "modal-fon" });
-    function kapat() { if (fon.parentNode) fon.parentNode.removeChild(fon); document.removeEventListener("keydown", esc); }
-    function esc(e) { if (e.key === "Escape") kapat(); }
+    var oncekiOdak = document.activeElement;
+    var kirli = false;
+    function kapat() {
+      if (fon.parentNode) fon.parentNode.removeChild(fon);
+      document.removeEventListener("keydown", tuslar);
+      if (oncekiOdak && oncekiOdak.focus) { try { oncekiOdak.focus(); } catch (e) {} }
+    }
+    function kapatmayiDene() {
+      if (!kirli) { kapat(); return; }
+      UI.onayla("Formdaki girdiler kaydedilmedi ve kapatınca kaybolacak. Yine de kapatılsın mı?", kapat);
+    }
+    function ustModalMi() {
+      var fonlar = document.querySelectorAll(".modal-fon");
+      return fonlar.length && fonlar[fonlar.length - 1] === fon;
+    }
+    function tuslar(e) {
+      if (!ustModalMi()) return;
+      if (e.key === "Escape") { e.stopPropagation(); kapatmayiDene(); return; }
+      if (e.key === "Enter" && e.target && e.target.tagName === "INPUT") {
+        var birincil = kutu.querySelector(".m-alt .btn.birincil");
+        if (birincil) { e.preventDefault(); birincil.click(); }
+        return;
+      }
+      if (e.key === "Tab") {   // odak tuzağı: modal içinde döngü
+        var odaklanabilir = kutu.querySelectorAll(
+          "button, input, select, textarea, a[href], [tabindex]:not([tabindex='-1'])");
+        if (!odaklanabilir.length) return;
+        var ilkO = odaklanabilir[0], sonO = odaklanabilir[odaklanabilir.length - 1];
+        if (e.shiftKey && document.activeElement === ilkO) { e.preventDefault(); sonO.focus(); }
+        else if (!e.shiftKey && document.activeElement === sonO) { e.preventDefault(); ilkO.focus(); }
+      }
+    }
     var alt = el("div", { class: "m-alt" });
     (dugmeler || []).forEach(function (d) {
       alt.appendChild(el("button", {
@@ -62,15 +160,17 @@ window.UI = (function () {
     var kutu = el("div", { class: "modal", role: "dialog", "aria-modal": "true" }, [
       el("div", { class: "m-baslik" }, [
         el("h3", null, [baslik]),
-        el("button", { class: "kapat-x", type: "button", "aria-label": "Kapat", onclick: kapat }, ["×"])
+        el("button", { class: "kapat-x", type: "button", "aria-label": "Kapat", onclick: kapatmayiDene }, ["×"])
       ]),
       el("div", { class: "m-ic" }, [govde]),
       alt
     ]);
     if (genislik) kutu.style.maxWidth = genislik + "px";
+    // Kullanıcı girdisi olduysa formu "kirli" say (programatik doldurmalar olay üretmez)
+    kutu.addEventListener("input", function () { kirli = true; });
     fon.appendChild(kutu);
-    fon.addEventListener("mousedown", function (e) { if (e.target === fon) kapat(); });
-    document.addEventListener("keydown", esc);
+    fon.addEventListener("mousedown", function (e) { if (e.target === fon) kapatmayiDene(); });
+    document.addEventListener("keydown", tuslar);
     document.body.appendChild(fon);
     var ilk = kutu.querySelector("input,select,textarea");
     if (ilk) setTimeout(function () { ilk.focus(); }, 60);
@@ -128,6 +228,24 @@ window.UI = (function () {
       v[g.getAttribute("data-anahtar")] = g.value;
     });
     return v;
+  };
+
+  /* Alanın altına satır-içi hata notu koyar (mesaj boşsa temizler).
+     Kaybolan toast yerine hatayı alanın YANINDA gösterir. */
+  UI.alanHata = function (alan, mesaj) {
+    if (!alan) return;
+    var eski = alan.querySelector(".hata-not");
+    if (eski) eski.remove();
+    alan.classList.remove("alan-hatali");
+    if (mesaj) {
+      alan.classList.add("alan-hatali");
+      alan.appendChild(el("div", { class: "hata-not" }, [mesaj]));
+    }
+  };
+  /* Kapsayıcıdaki tüm alan hatalarını temizle */
+  UI.alanHatalariTemizle = function (kok) {
+    kok.querySelectorAll(".hata-not").forEach(function (n) { n.remove(); });
+    kok.querySelectorAll(".alan-hatali").forEach(function (a) { a.classList.remove("alan-hatali"); });
   };
 
   /* ================= Genel kayıt tablosu =================
@@ -229,19 +347,26 @@ window.UI = (function () {
 
   UI.navGuncelle = function () { if (navKok) navCiz(); };
 
+  var sonCizilenYol = null;
   UI.ciz = function () {
     var yol = aktifYol();
     var rota = null;
     rotalar().forEach(function (r) { if (r.yol === yol) rota = r; });
     if (!rota) { location.hash = "#/panel"; return; }
+    // Aynı sayfada yeniden çizim (satır sil/düzenle vb.): kaydırma konumu korunur;
+    // sayfa DEĞİŞTİYSE başa dönülür.
+    var icerikEl = icerikKok.closest(".icerik");
+    var ayniSayfa = (yol === sonCizilenYol);
+    var eskiScroll = (ayniSayfa && icerikEl) ? icerikEl.scrollTop : 0;
     navCiz();
     ustBaslik.textContent = rota.ad;
     ustRef.textContent = rota.ref || "";
     ustAksiyon.innerHTML = "";
     icerikKok.innerHTML = "";
     rota.ciz(icerikKok);
-    icerikKok.closest(".icerik").scrollTop = 0;
-    window.scrollTo(0, 0);
+    if (icerikEl) icerikEl.scrollTop = ayniSayfa ? eskiScroll : 0;
+    if (!ayniSayfa) window.scrollTo(0, 0);
+    sonCizilenYol = yol;
   };
 
   UI.ustAksiyon = function (dugme) { ustAksiyon.appendChild(dugme); };
@@ -264,16 +389,23 @@ window.UI = (function () {
       el("div", { class: "surum" }, ["Sürüm " + (Depo.ayar("surum") || "3.0") + " — " + (Depo.ayar("kip_seti") || "IPCC AR6")])
     ]);
     ustBaslik = el("h2"); ustRef = el("div", { class: "ref" });
-    ustAksiyon = el("div", { style: "display:flex;gap:10px;flex:none" });
+    ustAksiyon = el("div", { style: "display:flex;gap:10px;flex:none;align-items:center" });
+    kayitRozet = el("span", { class: "kayit-rozet tamam", title: "Bulut kayıt durumu" }, ["✓ Buluta kaydedildi"]);
     icerikKok = el("div", { class: "govde" });
     var icerik = el("main", { class: "icerik" }, [
       el("header", { class: "ust-bar" }, [
-        el("div", { class: "ic" }, [el("div", null, [ustBaslik, ustRef]), ustAksiyon])
+        el("div", { class: "ic" }, [el("div", null, [ustBaslik, ustRef]),
+          el("div", { style: "display:flex;gap:10px;align-items:center" }, [kayitRozet, ustAksiyon])])
       ]),
       icerikKok
     ]);
     kok.appendChild(kenar); kok.appendChild(icerik);
-    window.addEventListener("hashchange", UI.ciz);
+    sonCizilenYol = null;   // yeni müşteri/oturum: kaydırma koruması sıfırlansın
+    // Dinleyiciler bir KEZ kurulur; her müşteri açılışında yeniden eklenip birikmez
+    if (!UI._dinleyicilerKuruldu) {
+      window.addEventListener("hashchange", UI.ciz);
+      UI._dinleyicilerKuruldu = true;
+    }
     UI.ciz();
     yedekKorumasiniKur();      // çıkış uyarısı + açılış hatırlatması
   };
@@ -285,15 +417,20 @@ window.UI = (function () {
      2) Açılış hatırlatması: son yedekten bu yana 7+ gün geçtiyse veya hiç
         yedek alınmamış ama veri varsa, nazik bir hatırlatma kartı gösterilir.
      ============================================================ */
+  var cikisKorumasiKuruldu = false;
   function yedekKorumasiniKur() {
-    // 1) Çıkış uyarısı — yalnızca yedeklenmemiş değişiklik varsa devreye girer
-    window.addEventListener("beforeunload", function (e) {
-      if (window.Depo && Depo.yedeklenmemisDegisiklikVar && Depo.yedeklenmemisDegisiklikVar()) {
-        e.preventDefault();
-        e.returnValue = "";   // tarayıcılar standart "ayrılmak üzeresiniz" uyarısını gösterir
-        return "";
-      }
-    });
+    // 1) Çıkış uyarısı — yalnızca yedeklenmemiş değişiklik varsa devreye girer.
+    //    Bir KEZ kurulur; her müşteri açılışında yeniden eklenip birikmez.
+    if (!cikisKorumasiKuruldu) {
+      cikisKorumasiKuruldu = true;
+      window.addEventListener("beforeunload", function (e) {
+        if (window.Depo && Depo.yedeklenmemisDegisiklikVar && Depo.yedeklenmemisDegisiklikVar()) {
+          e.preventDefault();
+          e.returnValue = "";   // tarayıcılar standart "ayrılmak üzeresiniz" uyarısını gösterir
+          return "";
+        }
+      });
+    }
 
     // 2) Açılış hatırlatması — sayfa kurulduktan kısa süre sonra (bir kez)
     setTimeout(function () {
@@ -370,8 +507,16 @@ window.UI = (function () {
       el("p", { style: "margin:0;line-height:1.65" }, [Depo.ayar("metodoloji_beyani") || ""])
     ], { mini: "Rapor kapağında otomatik yer alır" }));
     kok.appendChild(UI.kart("Verileriniz nerede saklanıyor?", [
-      el("p", { style: "margin:0 0 8px" }, ["Girdiğiniz her şey bu tarayıcının kalıcı hafızasına otomatik kaydedilir; sayfayı kapatsanız da kaybolmaz. Yine de düzenli olarak Yönetim Paneli → Yedekleme sekmesinden JSON yedeği almanızı öneririz. Yedek dosyası başka bir bilgisayara da taşınabilir."]),
-      el("p", { style: "margin:0;color:var(--soluk);font-size:12.5px" }, ["Emisyon faktörleri, açılır listeler ve form alanları data/ klasöründeki dosyalardan okunur ve Yönetim Paneli'nden kod yazmadan düzenlenebilir."])
+      el("p", { style: "margin:0 0 8px" }, [
+        "Girdiğiniz her şey, birkaç saniye içinde ekibin ortak bulut veritabanına (Supabase) otomatik kaydedilir; " +
+        "üst bardaki “Buluta kaydedildi” rozeti güncel durumu gösterir. Aynı müşteriyi ekipteki herkes en güncel " +
+        "hâliyle görür; başka bir kullanıcı aynı anda değişiklik yaparsa ekranda uyarı belirir."]),
+      el("p", { style: "margin:0 0 8px" }, [
+        "“Geri Al” düğmesi son 50 değişikliği tek tek geri alabilir. Ek güvence için Veri Aktarımı sayfasından " +
+        "şirket paketini (JSON) indirerek dosya yedeği alabilirsiniz; bu dosya başka ortama da taşınabilir."]),
+      el("p", { style: "margin:0;color:var(--soluk);font-size:12.5px" }, [
+        "Emisyon faktörleri, açılır listeler ve form alanları tüm ekip için ortaktır; yalnızca yönetici hesapları " +
+        "Yönetim Paneli'nden düzenleyebilir. Kaynak: GHG Protokol / IPCC araçları (Veri Kütüphanesi sayfasına bakın)."])
     ]));
   }
 
@@ -732,8 +877,8 @@ window.UI = (function () {
             ozetGuncelle();
             UI.navGuncelle();
           });
-          var rozet = c.tureks
-            ? el("span", { class: "rozet", style: "background:#1F7A63;color:#fff;font-size:10px;margin-left:6px" }, ["TUREKS"])
+          var rozet = c.onSecim
+            ? el("span", { class: "rozet", style: "background:#1F7A63;color:#fff;font-size:10px;margin-left:6px" }, ["ÖN SEÇİM"])
             : (c.ana ? el("span", { class: "rozet", style: "font-size:10px;margin-left:6px" }, ["ANA"]) : null);
           var etiket = el("label", { style: "display:flex;gap:8px;align-items:flex-start;font-size:12.5px;" +
             "font-weight:400;cursor:pointer;padding:7px 9px;border:1px solid var(--cizgi,#e0ddd6);border-radius:6px;" +
@@ -757,10 +902,10 @@ window.UI = (function () {
 
     /* Hızlı seçim düğmeleri */
     var turevDugme = el("button", { class: "btn ikincil kucuk", type: "button", onclick: function () {
-      tumCiltler.forEach(function (c) { if (c.tureks && secili.indexOf(c.no) < 0) secili.push(c.no); });
+      tumCiltler.forEach(function (c) { if (c.onSecim && secili.indexOf(c.no) < 0) secili.push(c.no); });
       Depo.ciltSec(secili); ciztListe(); ozetGuncelle(); UI.navGuncelle();
-      UI.bildir("TUREKS ciltleri (3, 6, 8, 10) seçildi");
-    } }, ["TUREKS varsayılanı (3-6-8-10)"]);
+      UI.bildir("Madencilik/yapı cilt seti (3, 6, 8, 10) seçildi");
+    } }, ["Madencilik/yapı seti (3-6-8-10)"]);
     var temizleDugme = el("button", { class: "btn ikincil kucuk", type: "button", onclick: function () {
       secili = []; Depo.ciltSec(secili); ciztListe(); ozetGuncelle(); UI.navGuncelle();
     } }, ["Seçimi temizle"]);
@@ -772,7 +917,7 @@ window.UI = (function () {
       el("p", { style: "margin:0 0 12px;font-size:12.5px;color:var(--soluk)" },
         ["Şirketiniz hangi sektör(ler)de faaliyet gösteriyorsa o ciltleri seçin. Bir şirket birden çok cilt kapsayabilir " +
          "(örn. hem madencilik hem inşaat malzemesi). Seçtiğiniz ciltlerin tüm metrikleri raporlanacak; " +
-         "birden çok cilttte ortak istenen metrikler (enerji, su, Kapsam 1 gibi) tek kez hesaplanıp ilgili tüm ciltlere referansla gösterilir."]),
+         "birden çok ciltte ortak istenen metrikler (enerji, su, Kapsam 1 gibi) tek kez hesaplanıp ilgili tüm ciltlere referansla gösterilir."]),
       ozet,
       el("div", { style: "display:flex;gap:8px;margin-bottom:4px;flex-wrap:wrap" }, [turevDugme, temizleDugme]),
       arama,
@@ -800,7 +945,7 @@ window.UI = (function () {
     // Cilt referans rozetleri (ortak metrikse birden çok)
     var ciltRozetleri = m.ciltler.map(function (c) {
       return el("span", { class: "rozet", style: "font-size:10px;margin-right:4px;" +
-        (c.tureks ? "" : "") }, ["Cilt " + c.no]);
+        (c.onSecim ? "" : "") }, ["Cilt " + c.no]);
     });
     var ortakNot = m.ciltler.length > 1
       ? el("span", { style: "font-size:11px;color:#1F7A63;font-weight:600;margin-left:4px" },
@@ -936,8 +1081,8 @@ window.UI = (function () {
       ciltMetrikleri.sort(function (a, b) { return (sira[a.tip] || 9) - (sira[b.tip] || 9); });
       ciltMetrikleri.forEach(function (m) { govde.appendChild(metrikSatiri(m)); });
 
-      var rozet = c.tureks
-        ? el("span", { class: "mini", style: "color:#1F7A63" }, [c.prefix + " • TUREKS"])
+      var rozet = c.onSecim
+        ? el("span", { class: "mini", style: "color:#1F7A63" }, [c.prefix + " • ÖN SEÇİM"])
         : el("span", { class: "mini" }, [c.prefix]);
       kok.appendChild(UI.kart("Cilt " + c.no + " — " + c.ad, [govde], { sag: rozet }));
     });
@@ -950,7 +1095,7 @@ window.UI = (function () {
   var MANUEL_EF_ZORUNLU = { "Proses Emisyonları": 1, "Satın Alınan Isı/Buhar": 1, "Diğer Kapsam 3": 1 };
 
   function faaliyetFormu(kayit, bittiginde) {
-    var s = Object.assign({ bolge: "TR", veriKalite: "", manuelEF: "" }, kayit || {});
+    var s = Object.assign({ bolge: "Other1", veriKalite: "", manuelEF: "" }, kayit || {});
     var govde = el("div");
     var izgara = el("div", { class: "form-izgara" });
     var onizleme = el("div", { class: "bilgi", style: "margin:16px 0 0" });
@@ -958,8 +1103,8 @@ window.UI = (function () {
     var aTesis = UI.alan({ anahtar: "tesis", etiket: "Tesis / Faaliyet Adı", tip: "metin", zorunlu: true, deger: s.tesis,
       yardim: "örn. Açık Ocak Jeneratörü, Konkasör Tesisi" });
     var aKategori = UI.alan({ anahtar: "kategori", etiket: "Emisyon Kategorisi", tip: "secim", liste: "faaliyet_kategorisi", zorunlu: true, deger: s.kategori });
-    var aBolge = UI.alan({ anahtar: "bolge", etiket: "EF Bölgesi", tip: "secim", liste: "bolge", deger: s.bolge,
-      yardim: "Emisyon faktörü tablosunun bölgesi" });
+    var aBolge = UI.alan({ anahtar: "bolge", etiket: "EF Kaynak Seti", tip: "secim", liste: "bolge", deger: s.bolge,
+      yardim: "Coğrafi bölge değil, emisyon faktörü kaynak setidir: **Other1** = IPCC 2006 genel değerleri (Türkiye için önerilen), **UK** = DEFRA, **US** = EPA" });
     var aKaynak = UI.alan({ anahtar: "kaynak", etiket: "Yakıt / Araç Tipi", tip: "secim", liste: [], zorunlu: true, genis: true });
     var aMiktar = UI.alan({ anahtar: "miktar", etiket: "Miktar", tip: "sayi", zorunlu: true, deger: s.miktar });
     var aBirim = UI.alan({ anahtar: "birim", etiket: "Birim", tip: "secim", liste: [], deger: s.birim });
@@ -973,21 +1118,41 @@ window.UI = (function () {
     function kaynakDoldur() {
       var kat = aKategori.girdi.value, bolge = BOLGESIZ[kat] ? null : aBolge.girdi.value;
       var secs = Motor.kaynakSecenekleri(kat, bolge);
+      // Seçilen kaynak sette bu kategori için kayıt yoksa TÜM setleri göster (boş liste bırakma)
+      var tumSetler = false;
+      if (!secs.length && bolge && !MANUEL_EF_ZORUNLU[kat]) {
+        secs = Motor.kaynakSecenekleri(kat, null);
+        tumSetler = true;
+      }
       var onceki = aKaynak.girdi.value || s.kaynak;
       aKaynak.girdi.innerHTML = "";
       aKaynak.girdi.appendChild(el("option", { value: "" }, [secs.length ? "— Seçin —" : "(bu kategoride seçim gerekmez)"]));
       secs.forEach(function (o) { aKaynak.girdi.appendChild(el("option", { value: o.anahtar }, [o.etiket])); });
       if (onceki) aKaynak.girdi.value = onceki;
+      UI.alanHata(aKaynak, tumSetler
+        ? "Seçilen kaynak sette bu kategori için kayıt yok; tüm setler [etiketli] listelendi." : "");
       aKaynak.style.display = (MANUEL_EF_ZORUNLU[kat]) ? "none" : "";
       aBolge.style.display = BOLGESIZ[kat] ? "none" : "";
     }
     function birimDoldur() {
       var kat = aKategori.girdi.value;
       var onceki = aBirim.girdi.value || s.birim;
+      var liste = Depo.birimler(kat);
       aBirim.girdi.innerHTML = "";
-      Depo.birimler(kat).forEach(function (b) { aBirim.girdi.appendChild(el("option", { value: b }, [b])); });
-      if (onceki) aBirim.girdi.value = onceki;
-      if (!aBirim.girdi.value) aBirim.girdi.selectedIndex = 0;
+      // Sessizce ilk birime varsayılan atanmaz: kullanıcı bilinçli seçer (yanlış birim = yanlış emisyon)
+      aBirim.girdi.appendChild(el("option", { value: "" }, ["— Seçin —"]));
+      liste.forEach(function (b) { aBirim.girdi.appendChild(el("option", { value: b }, [b])); });
+      if (onceki) {
+        // Kayıtlı birim artık listede yoksa SİLİNMEZ: işaretli seçenek olarak korunur
+        if (liste.indexOf(onceki) === -1) {
+          aBirim.girdi.appendChild(el("option", { value: onceki }, [onceki + " (listede yok)"]));
+          aBirim.girdi.value = onceki;
+          UI.alanHata(aBirim, "Bu birim güncel listede yok; hesap yine de bu birimle denenir. Gerekirse listeden geçerli birim seçin.");
+        } else {
+          aBirim.girdi.value = onceki;
+          UI.alanHata(aBirim, "");
+        }
+      }
     }
     function onizle() {
       var v = UI.degerler(izgara);
@@ -1019,8 +1184,33 @@ window.UI = (function () {
       { etiket: "Vazgeç" },
       { etiket: "Kaydet", sinif: "birincil", tik: function (kapat) {
         var v = UI.degerler(izgara);
-        if (!v.kategori) { UI.bildir("Kategori seçin", true); return; }
-        if (!v.miktar) { UI.bildir("Miktar girin", true); return; }
+        // Zorunlu alan denetimi — hatalar kaybolan toast yerine alanın yanında gösterilir
+        UI.alanHatalariTemizle(izgara);
+        var hataVar = false;
+        function zorunlu(alan, kosul, mesaj) { if (kosul) { UI.alanHata(alan, mesaj); hataVar = true; } }
+        zorunlu(aTesis, !String(v.tesis || "").trim(), "Tesis / faaliyet adı zorunludur");
+        zorunlu(aKategori, !v.kategori, "Kategori seçin");
+        zorunlu(aMiktar, !v.miktar || !(Motor.sayi(v.miktar) > 0), "Sıfırdan büyük bir miktar girin");
+        var manuelYok = !(Motor.sayi(v.manuelEF) > 0);
+        if (v.kategori && !MANUEL_EF_ZORUNLU[v.kategori] && manuelYok) {
+          zorunlu(aKaynak, !v.kaynak, "Yakıt / araç tipi seçin (ya da Manuel EF girin)");
+          zorunlu(aBirim, !v.birim, "Birim seçin");
+        }
+        if (v.kategori && MANUEL_EF_ZORUNLU[v.kategori]) {
+          zorunlu(aManuel, manuelYok, "Bu kategori için Manuel EF (kg CO2e/birim) zorunludur");
+        }
+        if (hataVar) {
+          var ilkHata = izgara.querySelector(".alan-hatali input, .alan-hatali select");
+          if (ilkHata) ilkHata.focus();
+          return;
+        }
+        // Hesap üretmeyen kayıt sessizce kaydedilmesin: kullanıcıya açıkça sorulur
+        var h = Motor.hesapFaaliyet(v);
+        if (h.hata) {
+          UI.onayla("Bu kayıt şu nedenle HESAPLANAMIYOR: “" + h.hata + "”. Toplamlara girmeyecek. " +
+            "Taslak olarak yine de kaydedilsin mi?", function () { bittiginde(v); kapat(); });
+          return;
+        }
         bittiginde(v); kapat();
       } }
     ]);
@@ -1046,12 +1236,20 @@ window.UI = (function () {
         csvSonuc.innerHTML = "";
         if (r.hatalar.length) {
           csvSonuc.appendChild(el("div", { class: "bilgi", style: "border-left-color:var(--oksit)" },
-            ["İçe aktarım yapılamadı: " + UI.kacir(r.hatalar.join(" • "))]));
+            ["İçe aktarım yapılamadı: " + r.hatalar.join(" • ")]));
         } else {
           csvSonuc.appendChild(el("div", { class: "bilgi yesil" },
             [el("b", null, [r.eklenen + " faaliyet kaydı eklendi"]),
-             r.atlanan ? " • " + r.atlanan + " satır atlandı (eksik/geçersiz veri)" : "",
+             r.atlanan ? " • " + r.atlanan + " satır atlandı" : "",
              ". Faaliyet Verisi sayfasından kaynak/birim eşleştirmesini tamamlayabilirsiniz."]));
+          // Satır bazlı uyarılar (atlanan satır numaraları + belirsiz sayı biçimleri) açıkça listelenir
+          if (r.uyarilar && r.uyarilar.length) {
+            csvSonuc.appendChild(el("div", { class: "bilgi", style: "border-left-color:var(--oksit);margin-top:8px;font-size:12.5px" },
+              [el("b", null, ["Kontrol edilmesi gerekenler:"]),
+               el("ul", { style: "margin:6px 0 0;padding-left:18px" },
+                 r.uyarilar.slice(0, 20).map(function (u) { return el("li", null, [u]); })),
+               r.uyarilar.length > 20 ? el("div", null, ["… ve " + (r.uyarilar.length - 20) + " uyarı daha"]) : null]));
+          }
           UI.bildir(r.eklenen + " kayıt içe aktarıldı");
         }
         csvGirdi.value = "";
@@ -1061,7 +1259,9 @@ window.UI = (function () {
     kok.appendChild(UI.kart("CSV ile Faaliyet İçe Aktarma", [
       el("p", { style: "margin:0 0 10px;font-size:13px" },
         ["Müşteriden gelen faaliyet verisini CSV dosyasından toplu yükleyin. Başlık satırı esnek eşlenir; " +
-         "en az “kategori” ve “miktar” sütunları bulunmalıdır. Türkçe sayı biçimi (1.234,56) ve hem virgül hem noktalı virgül ayırıcı desteklenir."]),
+         "en az “kategori” ve “miktar” sütunları bulunmalıdır. Hem Türkçe (1.234,56) hem uluslararası (1,234.56 / 10.5) " +
+         "sayı biçimi otomatik tanınır; belirsiz hücreler içe aktarım sonrası uyarı olarak listelenir. " +
+         "Virgül ve noktalı virgül ayırıcıların ikisi de desteklenir; dosya UTF-8 olmalıdır."]),
       el("div", { class: "bilgi", style: "font-size:12px;margin-bottom:10px" },
         ["Tanınan başlıklar: tesis, kategori, kaynak, miktar, birim, donem, aciklama. Örnek: ",
          el("code", null, ["tesis;kategori;kaynak;miktar;birim;donem"])]),
@@ -1202,6 +1402,27 @@ window.UI = (function () {
     ], { kapsam: "k3" }));
   }
 
+  /* Kayıt dizisi HER işlemde Depo.veri'den taze çözülür: modal açıkken veri
+     uzaktan yenilendiyse (⟳ Yenile / Geri Al) bayat dizi referansına yazılıp
+     değişikliğin sessizce kaybolması önlenir. */
+  function tazeDizi(ad) {
+    if (!Array.isArray(Depo.veri[ad])) Depo.veri[ad] = [];
+    return Depo.veri[ad];
+  }
+  function tazeIndeks(ad, no) {
+    var arr = tazeDizi(ad);
+    for (var i = 0; i < arr.length; i++) if (arr[i] && arr[i].no === no) return i;
+    return -1;
+  }
+  function tazeGuncelle(ad, v) {   // no'ya göre günceller; kayıt yoksa sona ekler + uyarır
+    var ix = tazeIndeks(ad, v.no);
+    if (ix > -1) tazeDizi(ad)[ix] = v;
+    else {
+      tazeDizi(ad).push(v);
+      UI.bildir("Kayıt siz düzenlerken uzaktan yenilenmişti; değişikliğiniz listeye yeniden eklendi.", true);
+    }
+  }
+
   function cizFaaliyet(kok) {
     var liste = Depo.veri.faaliyet;
     function yenile() { UI.ciz(); }
@@ -1209,7 +1430,7 @@ window.UI = (function () {
     UI.ustAksiyon(el("button", { class: "btn birincil", type: "button", onclick: function () {
       faaliyetFormu(null, function (v) {
         v.no = Depo.yeniNo("F");
-        liste.push(v); Depo.kaydet(); yenile();
+        tazeDizi("faaliyet").push(v); Depo.kaydet(); yenile();
       });
     } }, ["+ Yeni Kayıt"]));
 
@@ -1217,6 +1438,15 @@ window.UI = (function () {
       ["Kapsam 1 (sabit/mobil yanma, proses) ve Kapsam 3 (taşıma, seyahat, ulaşım) faaliyetleri tek listede tutulur; kapsam, kategoriden otomatik belirlenir. CO2e değeri kayıt sırasında canlı hesaplanır."]));
 
     var T = Motor.toplamlar();
+    // Hesaplanamayan kayıtlar yalnız satırdaki "!" rozetine gizlenmez; sayfa başında açıkça duyurulur
+    var fHatalar = T.hatalar.filter(function (h) { return /^F-/.test(h); });
+    if (fHatalar.length) {
+      kok.appendChild(el("div", { class: "bilgi", style: "border-left-color:var(--oksit,#B4642D)" }, [
+        el("b", null, [fHatalar.length + " kayıt hesaplanamıyor ve toplamlara GİRMİYOR. "]),
+        "Tabloda “!” rozetli satırları Düzenle ile açıp eksikleri tamamlayın. ",
+        el("span", { style: "font-size:12px;color:var(--soluk)" }, [UI.kisalt(fHatalar.join(" • "), 220)])
+      ]));
+    }
     kok.appendChild(UI.kart("Faaliyet Kayıtları", [
       UI.veriTablo({
         satirlar: liste,
@@ -1249,16 +1479,18 @@ window.UI = (function () {
           } }
         ],
         islemler: [
-          { etiket: "Düzenle", tik: function (s, i) {
-            faaliyetFormu(s, function (v) { v.no = s.no; liste[i] = v; Depo.kaydet(); yenile(); });
+          { etiket: "Düzenle", tik: function (s) {
+            faaliyetFormu(s, function (v) { v.no = s.no; tazeGuncelle("faaliyet", v); Depo.kaydet(); yenile(); });
           } },
           { etiket: "Kopyala", tik: function (s) {
             var k = Object.assign({}, s, { no: Depo.yeniNo("F") });
-            liste.push(k); Depo.kaydet(); yenile();
+            tazeDizi("faaliyet").push(k); Depo.kaydet(); yenile();
           } },
           { etiket: "Sil", sinif: "tehlike", tik: function (s, i) {
             UI.onayla("\u201C" + (s.no || "") + " — " + (s.tesis || "") + "\u201D kaydı silinsin mi?", function () {
-              liste.splice(i, 1); Depo.kaydet(); yenile();
+              var ix = tazeIndeks("faaliyet", s.no);
+              if (ix > -1) { tazeDizi("faaliyet").splice(ix, 1); Depo.kaydet(); }
+              yenile();
             });
           } }
         ]
@@ -1320,7 +1552,14 @@ window.UI = (function () {
       { etiket: "Vazgeç" },
       { etiket: "Kaydet", sinif: "birincil", tik: function (kapat) {
         var v = UI.degerler(izgara);
-        if (!v.gaz) { UI.bildir("Gaz seçin", true); return; }
+        UI.alanHatalariTemizle(izgara);
+        var hataVar = false;
+        if (!String(v.ekipman || "").trim()) { UI.alanHata(aAd, "Ekipman / sistem adı zorunludur"); hataVar = true; }
+        if (!v.gaz) { UI.alanHata(aGaz, "Gaz seçin (KIP tablosundan)"); hataVar = true; }
+        if (v.yontem === "Tarama (Basit)" && !(Motor.sayi(v.kapasite) > 0)) {
+          UI.alanHata(aKap, "Tarama yönteminde ekipman kapasitesi (kg) zorunludur"); hataVar = true;
+        }
+        if (hataVar) { var ilkH = izgara.querySelector(".alan-hatali input, .alan-hatali select"); if (ilkH) ilkH.focus(); return; }
         bittiginde(v); kapat();
       } }
     ]);
@@ -1333,7 +1572,15 @@ window.UI = (function () {
     } }, ["+ Yeni Kayıt"]));
 
     kok.appendChild(el("div", { class: "bilgi" },
-      ["Klima, soğutma ve yangın söndürme sistemlerindeki florlu gaz (HFC, PFC, SF6 vb.) kaçakları Kapsam 1'e dahildir. Kütle Dengesi yöntemi servis kayıtlarına, Tarama yöntemi ekipman kapasitesi × varsayılan kaçak oranına dayanır."]));
+      ["Klima, soğutma ve yangın söndürme sistemlerindeki florlu gaz (HFC, PFC, SF6 vb.) kaçakları Kapsam 1'e dahildir. Kütle Dengesi yöntemi servis kayıtlarına, Tarama yöntemi ekipman kapasitesi × varsayılan kaçak oranına (IPCC aralıklarının orta noktası) dayanır."]));
+
+    var sHatalar = Motor.toplamlar().hatalar.filter(function (h) { return /^S-/.test(h); });
+    if (sHatalar.length) {
+      kok.appendChild(el("div", { class: "bilgi", style: "border-left-color:var(--oksit,#B4642D)" }, [
+        el("b", null, [sHatalar.length + " kayıt hesaplanamıyor ve toplamlara GİRMİYOR. "]),
+        el("span", { style: "font-size:12px;color:var(--soluk)" }, [UI.kisalt(sHatalar.join(" • "), 220)])
+      ]));
+    }
 
     kok.appendChild(UI.kart("Soğutucu / Kaçak Gaz Kayıtları", [
       UI.veriTablo({
@@ -1356,12 +1603,14 @@ window.UI = (function () {
           } }
         ],
         islemler: [
-          { etiket: "Düzenle", tik: function (s, i) {
-            sogutucuFormu(s, function (v) { v.no = s.no; liste[i] = v; Depo.kaydet(); UI.ciz(); });
+          { etiket: "Düzenle", tik: function (s) {
+            sogutucuFormu(s, function (v) { v.no = s.no; tazeGuncelle("sogutucu", v); Depo.kaydet(); UI.ciz(); });
           } },
           { etiket: "Sil", sinif: "tehlike", tik: function (s, i) {
             UI.onayla("\u201C" + (s.no || "") + " — " + (s.ekipman || "") + "\u201D silinsin mi?", function () {
-              liste.splice(i, 1); Depo.kaydet(); UI.ciz();
+              var ix = tazeIndeks("sogutucu", s.no);
+              if (ix > -1) { tazeDizi("sogutucu").splice(ix, 1); Depo.kaydet(); }
+              UI.ciz();
             });
           } }
         ]
@@ -1391,6 +1640,10 @@ window.UI = (function () {
 
     function onizle() {
       var v = UI.degerler(izgara);
+      // REC, tüketimden büyükse motor sessizce kırpar — kullanıcıya açıkça söylenir
+      var kwhS = Motor.sayi(v.kwh), recS = Motor.sayi(v.recKwh);
+      UI.alanHata(aRec, (recS > kwhS && kwhS > 0)
+        ? "REC miktarı tüketimden büyük olamaz; hesapta " + Motor.fmt(kwhS, 0) + " kWh olarak kırpılacak." : "");
       var h = Motor.hesapElektrik(v);
       if (h.hata) { onizleme.className = "bilgi"; onizleme.innerHTML = "<b>Hesap bekleniyor:</b> " + UI.kacir(h.hata); }
       else {
@@ -1410,7 +1663,12 @@ window.UI = (function () {
       { etiket: "Vazgeç" },
       { etiket: "Kaydet", sinif: "birincil", tik: function (kapat) {
         var v = UI.degerler(izgara);
-        if (!v.kwh) { UI.bildir("Tüketim (kWh) girin", true); return; }
+        UI.alanHatalariTemizle(izgara);
+        var hataVar = false;
+        if (!String(v.tesis || "").trim()) { UI.alanHata(aAd, "Tesis / sayaç adı zorunludur"); hataVar = true; }
+        if (!v.sebeke) { UI.alanHata(aSeb, "Şebeke seçin"); hataVar = true; }
+        if (!v.kwh || !(Motor.sayi(v.kwh) > 0)) { UI.alanHata(aKwh, "Sıfırdan büyük tüketim (kWh) girin"); hataVar = true; }
+        if (hataVar) { var ilkH = izgara.querySelector(".alan-hatali input, .alan-hatali select"); if (ilkH) ilkH.focus(); return; }
         bittiginde(v); kapat();
       } }
     ]);
@@ -1424,6 +1682,14 @@ window.UI = (function () {
 
     kok.appendChild(el("div", { class: "bilgi" },
       ["TSRS 2 md. 29(a)(ii) uyarınca Kapsam 2 hem Lokasyona Dayalı (şebeke ortalama EF) hem Piyasaya Dayalı (sözleşmeye özgü EF; REC'li tüketim sıfır) yaklaşımla raporlanır. İki sütun da otomatik hesaplanır."]));
+
+    var eHatalar = Motor.toplamlar().hatalar.filter(function (h) { return /^E-/.test(h); });
+    if (eHatalar.length) {
+      kok.appendChild(el("div", { class: "bilgi", style: "border-left-color:var(--oksit,#B4642D)" }, [
+        el("b", null, [eHatalar.length + " kayıt hesaplanamıyor ve toplamlara GİRMİYOR. "]),
+        el("span", { style: "font-size:12px;color:var(--soluk)" }, [UI.kisalt(eHatalar.join(" • "), 220)])
+      ]));
+    }
 
     kok.appendChild(UI.kart("Elektrik Tüketim Kayıtları", [
       UI.veriTablo({
@@ -1443,12 +1709,14 @@ window.UI = (function () {
           } }
         ],
         islemler: [
-          { etiket: "Düzenle", tik: function (s, i) {
-            elektrikFormu(s, function (v) { v.no = s.no; liste[i] = v; Depo.kaydet(); UI.ciz(); });
+          { etiket: "Düzenle", tik: function (s) {
+            elektrikFormu(s, function (v) { v.no = s.no; tazeGuncelle("elektrik", v); Depo.kaydet(); UI.ciz(); });
           } },
           { etiket: "Sil", sinif: "tehlike", tik: function (s, i) {
             UI.onayla("\u201C" + (s.no || "") + " — " + (s.tesis || "") + "\u201D silinsin mi?", function () {
-              liste.splice(i, 1); Depo.kaydet(); UI.ciz();
+              var ix = tazeIndeks("elektrik", s.no);
+              if (ix > -1) { tazeDizi("elektrik").splice(ix, 1); Depo.kaydet(); }
+              UI.ciz();
             });
           } }
         ]
@@ -1537,10 +1805,11 @@ window.UI = (function () {
           sutunlar: sutunlar,
           islemler: [
             { etiket: "Düzenle", tik: function (s, i) {
-              modulKayitFormu(m, s, function (v) { mv.kayitlar[i] = v; Depo.kaydet(); UI.ciz(); });
+              // Kayıt anında taze modül verisi çözülür (uzaktan yenileme sonrası bayat referansa yazılmaz)
+              modulKayitFormu(m, s, function (v) { Depo.modulVeri(m.id).kayitlar[i] = v; Depo.kaydet(); UI.ciz(); });
             } },
             { etiket: "Sil", sinif: "tehlike", tik: function (s, i) {
-              UI.onayla("Bu kayıt silinsin mi?", function () { mv.kayitlar.splice(i, 1); Depo.kaydet(); UI.ciz(); });
+              UI.onayla("Bu kayıt silinsin mi?", function () { Depo.modulVeri(m.id).kayitlar.splice(i, 1); Depo.kaydet(); UI.ciz(); });
             } }
           ]
         })

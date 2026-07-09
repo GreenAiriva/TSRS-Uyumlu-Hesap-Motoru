@@ -50,7 +50,7 @@ VERI.sektor_ciltleri = [
   "ad": "Yapı Ürünleri ve Mobilya",
   "prefix": "CG-BF",
   "tip": "orta",
-  "tureks": true,
+  "onSecim": true,
   "metrikler": [
    {"kod": "CG-BF-130a.1", "ad": "Toplam enerji, şebeke %, yenilenebilir %", "tip": "hesap", "birim": "GJ, %", "ortak": "enerji"},
    {"kod": "CG-BF-410a.1", "ad": "Ürün yaşam döngüsü etkilerini yönetme + sürdürülebilir ürün talebi", "tip": "ta"},
@@ -94,7 +94,7 @@ VERI.sektor_ciltleri = [
   "ad": "Çok Hatlı ve Özel Perakendeciler ve Distribütörler",
   "prefix": "CG-MR",
   "tip": "hafif",
-  "tureks": true,
+  "onSecim": true,
   "metrikler": [
    {"kod": "CG-MR-130a.1", "ad": "Toplam enerji, şebeke %, yenilenebilir %", "tip": "hesap", "birim": "GJ, %", "ortak": "enerji"},
    {"kod": "CG-MR-000.A", "ad": "Perakende satış yeri + dağıtım merkezi sayısı", "tip": "veri", "birim": "sayı"},
@@ -123,7 +123,7 @@ VERI.sektor_ciltleri = [
   "ad": "İnşaat Malzemeleri",
   "prefix": "EM-CM",
   "tip": "agir",
-  "tureks": true,
+  "onSecim": true,
   "metrikler": [
    {"kod": "EM-CM-110a.1", "ad": "Brüt K1 + emisyon sınırlayıcı düzenleme %", "tip": "hesap", "birim": "tCO2e, %", "ortak": "k1", "kapsam": 1},
    {"kod": "EM-CM-110a.2", "ad": "K1 stratejisi/planı + performans", "tip": "ta"},
@@ -158,7 +158,7 @@ VERI.sektor_ciltleri = [
   "ad": "Metaller ve Madencilik",
   "prefix": "EM-MM",
   "tip": "agir",
-  "tureks": true,
+  "onSecim": true,
   "ana": true,
   "metrikler": [
    {"kod": "EM-MM-110a.1", "ad": "Brüt K1 + emisyon sınırlayıcı düzenleme %", "tip": "hesap", "birim": "tCO2e, %", "ortak": "k1", "kapsam": 1},

@@ -58,3 +58,4 @@ npm-debug.log*
 *-AutoRecovered.*
 *.xlsx
 !data-templates/*.xlsx
+docs/sektor_cilt_haritasi.md
