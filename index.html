@@ -19,34 +19,45 @@
 
 <!-- ============ DÜZENLENEBİLİR VERİ DOSYALARI (data/ klasörü) ============
      Sıralama önemli değildir; hepsi window.VERI altına yazar. -->
-<script src="data/ayarlar.js"></script>
-<script src="data/listeler.js"></script>
-<script src="data/tsrs_modulleri.js"></script>
-<script src="data/sektor_ciltleri.js"></script>
-<script src="data/ef_kaynaklari.js"></script>
-<script src="data/kip_ar6.js"></script>
-<script src="data/ef_sabit_yanma.js"></script>
-<script src="data/ef_mobil_yakit.js"></script>
-<script src="data/ef_mobil_mesafe.js"></script>
-<script src="data/ef_tasimacilik.js"></script>
-<script src="data/ef_toplu_tasima.js"></script>
-<script src="data/ef_elektrik.js"></script>
-<script src="data/kacak_oranlari.js"></script>
-<script src="data/yakit_ekonomisi.js"></script>
+<script src="data/ayarlar.js?v=9"></script>
+<script src="data/listeler.js?v=9"></script>
+<script src="data/tsrs_modulleri.js?v=9"></script>
+<script src="data/sektor_ciltleri.js?v=9"></script>
+<script src="data/ef_kaynaklari.js?v=9"></script>
+<script src="data/kip_ar6.js?v=9"></script>
+<script src="data/ef_sabit_yanma.js?v=9"></script>
+<script src="data/ef_mobil_yakit.js?v=9"></script>
+<script src="data/ef_mobil_mesafe.js?v=9"></script>
+<script src="data/ef_tasimacilik.js?v=9"></script>
+<script src="data/ef_toplu_tasima.js?v=9"></script>
+<script src="data/ef_elektrik.js?v=9"></script>
+<script src="data/kacak_oranlari.js?v=9"></script>
+<script src="data/yakit_ekonomisi.js?v=9"></script>
+
+<!-- ============ BULUT ALTYAPISI ============
+     Supabase istemcisi (çok-kullanıcılı veritabanı + kimlik) ve JSON Patch (geri al).
+     Yerel kopyalar (js/vendor/) — CDN bağımlılığı yok, çevrimdışı yüklenir; yalnız
+     veritabanı çağrıları internet gerektirir. -->
+<script src="js/vendor/supabase.min.js"></script>
+<script src="js/vendor/fast-json-patch.min.js"></script>
+<script src="js/sb.js?v=9"></script>
 
 <!-- ============ UYGULAMA ÇEKİRDEĞİ (js/ klasörü) ============
-     Sıralama önemlidir: depo → motor → arayüz → sayfalar -->
-<script src="js/depo.js"></script>
-<script src="js/motor.js"></script>
-<script src="js/arayuz.js"></script>
-<script src="js/panel.js"></script>
-<script src="js/rapor.js"></script>
-<script src="js/admin.js"></script>
+     Sıralama önemlidir: depo → motor → arayüz → sayfalar → auth (bootstrap)
+     ?v=N sürüm damgası: dağıtımda artırınca istemciler önbellekteki eski
+     sürüm yerine güncel dosyayı çeker. -->
+<script src="js/depo.js?v=9"></script>
+<script src="js/motor.js?v=9"></script>
+<script src="js/arayuz.js?v=9"></script>
+<script src="js/panel.js?v=9"></script>
+<script src="js/rapor.js?v=9"></script>
+<script src="js/admin.js?v=9"></script>
+<script src="js/auth.js?v=9"></script>
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {
   try {
-    UI.basla();
+    App.basla();
   } catch (hata) {
     document.getElementById("uygulama").innerHTML =
       "<div style='max-width:640px;margin:60px auto;padding:24px;font-family:sans-serif;border:1px solid #B3402E;border-radius:4px'>" +

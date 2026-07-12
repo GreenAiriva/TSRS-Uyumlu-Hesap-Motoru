@@ -30,14 +30,25 @@ window.Admin = (function () {
   ];
 
   function kopya(x) { return JSON.parse(JSON.stringify(x)); }
+  /* Hücre değerini sayıya çevirir; TR (1.234,56) ve EN (1,234.56) biçimlerini tanır.
+     Sayı olmayan metinler (yakıt adı vb.) olduğu gibi kalır. Eski sürüm tuzağı:
+     "1.234,56" NaN kalıp STRING kaydediliyor, motor bunu 1.234 okuyordu (~1000×). */
   function sayilastir(v) {
     if (typeof v !== "string") return v;
     var t = v.trim();
     if (t === "") return "";
-    var n = Number(t.replace(",", "."));
     /* baştaki sıfırlı kodları (örn. "07.29") sayıya çevirme */
-    return (isFinite(n) && !/^0\d/.test(t)) ? n : v;
+    if (/^0\d/.test(t)) return v;
+    var norm = t.replace(/\s/g, "");
+    if (norm.indexOf(",") > -1) {
+      if (norm.lastIndexOf(",") > norm.lastIndexOf(".")) norm = norm.replace(/\./g, "").replace(/,/g, ".");
+      else norm = norm.replace(/,/g, "");
+    }
+    var n = Number(norm);
+    return (isFinite(n) && norm !== "") ? n : v;
   }
+
+  function yonetici() { return !!(window.Depo && Depo.aktifKullanici && Depo.aktifKullanici.rol === "admin"); }
 
   A.ciz = function (kok) {
     var sekmeler = [
@@ -47,6 +58,20 @@ window.Admin = (function () {
       { id: "gorunum", ad: "Görünüm ve Metinler" },
       { id: "yedek",   ad: "Yedekleme" }
     ];
+    if (yonetici()) sekmeler.push({ id: "kullanicilar", ad: "Kullanıcılar" });
+
+    // Referans/ayar düzenlemeleri tüm ekip için ortaktır ve yalnız yönetici kaydedebilir.
+    if (!yonetici()) {
+      kok.appendChild(el("div", { class: "bilgi", style: "border-left-color:var(--oksit,#B4642D)" }, [
+        "Bu panel referans tablolarını, listeleri ve form alanlarını TÜM ekip için düzenler. " +
+        "Değişiklikleri yalnızca yönetici hesapları kaydedebilir; sizde görüntüleme amaçlıdır. " +
+        "Yedekleme ve şirket paketi işlemlerini kullanabilirsiniz."
+      ]));
+    }
+
+    var gecerli = sekmeler.some(function (s) { return s.id === aktifSekme; });
+    if (!gecerli) aktifSekme = "ef";
+
     var sekmeBari = el("div", { class: "sekmeler" }, sekmeler.map(function (s) {
       return el("button", { class: "sekme" + (aktifSekme === s.id ? " aktif" : ""), type: "button",
         onclick: function () { aktifSekme = s.id; UI.ciz(); } }, [s.ad]);
@@ -54,8 +79,65 @@ window.Admin = (function () {
     kok.appendChild(sekmeBari);
     var govde = el("div");
     kok.appendChild(govde);
-    ({ ef: sekmeEF, liste: sekmeListe, form: sekmeForm, gorunum: sekmeGorunum, yedek: sekmeYedek }[aktifSekme])(govde);
+    ({ ef: sekmeEF, liste: sekmeListe, form: sekmeForm, gorunum: sekmeGorunum,
+       yedek: sekmeYedek, kullanicilar: sekmeKullanicilar }[aktifSekme])(govde);
   };
+
+  /* ============================================================
+     SEKME 6 — KULLANICILAR (yalnız yönetici)
+     Kayıt olan kullanıcıları onaylama / rol atama.
+     ============================================================ */
+  function sekmeKullanicilar(kok) {
+    kok.appendChild(el("div", { class: "bilgi" }, [
+      "Kayıt olan kullanıcıları buradan onaylayın. Onaysız kullanıcı giriş yapabilir ama müşteri verilerine erişemez. " +
+      "Yönetici rolü; referans düzenleme, müşteri silme ve kullanıcı onaylama yetkisi verir."
+    ]));
+    var kart = UI.kart("Kayıtlı Kullanıcılar", [el("div", null, ["Yükleniyor…"])]);
+    kok.appendChild(kart);
+    var govde = kart.querySelector(".kart-ic");
+
+    function yenile() {
+      SB.from("profiles").select("id,email,ad_soyad,rol,onayli,created_at")
+        .order("created_at", { ascending: true }).then(function (q) {
+          govde.innerHTML = "";
+          if (q.error) { govde.appendChild(el("div", { class: "bilgi", style: "border-left-color:var(--oksit)" },
+            ["Liste alınamadı: " + UI.kacir(q.error.message)])); return; }
+          var satirlar = q.data || [];
+          govde.appendChild(UI.veriTablo({
+            satirlar: satirlar,
+            bosMesaj: "Henüz kayıtlı kullanıcı yok.",
+            sutunlar: [
+              { etiket: "E-posta", deger: function (u) { return u.email; } },
+              { etiket: "Ad Soyad", deger: function (u) { return u.ad_soyad || "—"; } },
+              { etiket: "Rol", deger: function (u) { return u.rol === "admin"
+                  ? el("span", { class: "rozet", style: "background:#B4642D;color:#fff" }, ["yönetici"])
+                  : "kullanıcı"; } },
+              { etiket: "Durum", deger: function (u) { return u.onayli
+                  ? el("span", { class: "rozet", style: "background:#1F7A63;color:#fff" }, ["onaylı"])
+                  : el("span", { class: "rozet", style: "background:#9aa0a6;color:#fff" }, ["bekliyor"]); } }
+            ],
+            islemler: [
+              { etiket: "Onayla/Kaldır", tik: function (u) {
+                  SB.from("profiles").update({ onayli: !u.onayli }).eq("id", u.id).then(function (r) {
+                    if (r.error) UI.bildir(r.error.message, true);
+                    else { UI.bildir(u.onayli ? "Onay kaldırıldı" : "Kullanıcı onaylandı"); yenile(); }
+                  });
+                } },
+              { etiket: "Rol değiştir", sinif: "ikincil", tik: function (u) {
+                  var yeniRol = u.rol === "admin" ? "kullanici" : "admin";
+                  UI.onayla("“" + UI.kacir(u.email) + "” için rol “" + yeniRol + "” olsun mu?", function () {
+                    SB.from("profiles").update({ rol: yeniRol, onayli: true }).eq("id", u.id).then(function (r) {
+                      if (r.error) UI.bildir(r.error.message, true);
+                      else { UI.bildir("Rol güncellendi"); yenile(); }
+                    });
+                  });
+                } }
+            ]
+          }));
+        });
+    }
+    yenile();
+  }
 
   /* ============================================================
      SEKME 1 — EMİSYON FAKTÖRLERİ
@@ -191,10 +273,10 @@ window.Admin = (function () {
         el("button", { class: "btn birincil kucuk", type: "button", onclick: function () {
           var secenekler = alanT.value.split("\n").map(function (s) { return s.trim(); }).filter(Boolean);
           Depo.listeOzel[aktifListe] = secenekler;
-          Depo.kaydet(); UI.bildir("\u201C" + aktifListe + "\u201D listesi güncellendi");
+          Depo.konfigKaydet(); UI.bildir("\u201C" + aktifListe + "\u201D listesi güncellendi");
         } }, ["Kaydet"]),
         el("button", { class: "btn tehlike kucuk", type: "button", onclick: function () {
-          delete Depo.listeOzel[aktifListe]; Depo.kaydet();
+          delete Depo.listeOzel[aktifListe]; Depo.konfigKaydet();
           alanT.value = Depo.liste(aktifListe).join("\n");
           UI.bildir("Varsayılana dönüldü");
         } }, ["Varsayılana dön"])
@@ -224,7 +306,7 @@ window.Admin = (function () {
           var G = kopya(Object.assign({}, (VERI.listeler.birimler || {}), (Depo.listeOzel.birimler || {})));
           G[aktifBirimKat] = bT.value.split("\n").map(function (s) { return s.trim(); }).filter(Boolean);
           Depo.listeOzel.birimler = G;
-          Depo.kaydet(); UI.bildir("Birimler güncellendi");
+          Depo.konfigKaydet(); UI.bildir("Birimler güncellendi");
         } }, ["Kaydet"])
       ]),
       el("div", { class: "alan" }, [el("label", null, ["Birimler (her satıra bir tane)"]), bT])
@@ -263,7 +345,7 @@ window.Admin = (function () {
       el("div", { class: "admin-arac" }, [sec,
         Depo.modulTanimOzel ? el("button", { class: "btn tehlike kucuk", type: "button", onclick: function () {
           UI.onayla("TÜM modüllerin form tanımları orijinal hâline döndürülsün mü? (Girilmiş veriler silinmez.)", function () {
-            Depo.modulTanimOzel = null; Depo.kaydet(); UI.ciz();
+            Depo.modulTanimOzel = null; Depo.konfigKaydet(); UI.ciz();
           });
         } }, ["Tüm tanımları varsayılana döndür"]) : null
       ])
@@ -275,7 +357,7 @@ window.Admin = (function () {
         degisti: function (e) {
           var t = tanimlariKlonla();
           t.forEach(function (x) { if (x.id === m.id) x[anahtar] = e.target.value; });
-          Depo.kaydet(); UI.bildir("Kaydedildi");
+          Depo.konfigKaydet(); UI.bildir("Kaydedildi");
         } });
     }
     kok.appendChild(UI.kart("Sayfa Başlığı ve Açıklaması", [el("div", { class: "form-izgara" }, [
@@ -314,7 +396,7 @@ window.Admin = (function () {
             }
             if (su) x.tablo.sutunlar[indeks] = yeni; else x.tablo.sutunlar.push(yeni);
           });
-          Depo.kaydet(); UI.bildir("Form güncellendi"); kapat(); UI.ciz();
+          Depo.konfigKaydet(); UI.bildir("Form güncellendi"); kapat(); UI.ciz();
         } }
       ]);
     }
@@ -334,7 +416,7 @@ window.Admin = (function () {
             UI.onayla("\u201C" + s.etiket + "\u201D sütunu kaldırılsın mı? (Eski kayıtlardaki değerler saklanır ama görünmez.)", function () {
               var t = tanimlariKlonla();
               t.forEach(function (x) { if (x.id === m.id && x.tablo) x.tablo.sutunlar.splice(i, 1); });
-              Depo.kaydet(); UI.ciz();
+              Depo.konfigKaydet(); UI.ciz();
             });
           } }
         ]
@@ -359,7 +441,7 @@ window.Admin = (function () {
             var yeni = { anahtar: a ? a.anahtar : anahtarUret(v.etiket), etiket: v.etiket, yardim: v.yardim };
             if (a) x.anlatilar[indeks] = yeni; else x.anlatilar.push(yeni);
           });
-          Depo.kaydet(); UI.bildir("Form güncellendi"); kapat(); UI.ciz();
+          Depo.konfigKaydet(); UI.bildir("Form güncellendi"); kapat(); UI.ciz();
         } }
       ]);
     }
@@ -377,7 +459,7 @@ window.Admin = (function () {
             UI.onayla("\u201C" + s.etiket + "\u201D alanı kaldırılsın mı?", function () {
               var t = tanimlariKlonla();
               t.forEach(function (x) { if (x.id === m.id && x.anlatilar) x.anlatilar.splice(i, 1); });
-              Depo.kaydet(); UI.ciz();
+              Depo.konfigKaydet(); UI.ciz();
             });
           } }
         ]
@@ -397,7 +479,7 @@ window.Admin = (function () {
           var v = e.target.value;
           Depo.ayarOzel[anahtar] = anahtar === "kilavuz_adimlar"
             ? v.split("\n").map(function (s) { return s.trim(); }).filter(Boolean) : v;
-          Depo.kaydet(); UI.bildir("Kaydedildi");
+          Depo.konfigKaydet(); UI.bildir("Kaydedildi");
         } });
     }
     kok.appendChild(el("div", { class: "bilgi" }, ["Değişiklikler anında kaydedilir; kenar çubuğu ve raporda görmek için sayfayı değiştirmeniz yeterlidir."]));
@@ -417,7 +499,7 @@ window.Admin = (function () {
       kok.appendChild(UI.kart(null, [
         el("button", { class: "btn tehlike kucuk", type: "button", onclick: function () {
           UI.onayla("Görünüm ve metin düzenlemeleri orijinal hâline döndürülsün mü?", function () {
-            Depo.ayarOzel = {}; Depo.kaydet(); UI.ciz();
+            Depo.ayarOzel = {}; Depo.konfigKaydet(); UI.ciz();
           });
         } }, ["Metinleri varsayılana döndür"])
       ]));

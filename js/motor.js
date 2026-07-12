@@ -16,7 +16,21 @@ window.Motor = (function () {
   var M3_L = 1000;
   var SCF_M3 = 0.028316846592;
 
-  function sayi(v) { var n = parseFloat(v); return isFinite(n) ? n : 0; }
+  /* Sayı çözümleyici — hem TR (1.234,56 / 10,5) hem EN (1,234.56 / 10.5) biçimini
+     güvenle çözer. parseFloat("1.234,56")=1.234 tuzağını önler. */
+  function sayi(v) {
+    if (typeof v === "string") {
+      var t = v.trim();
+      if (t.indexOf(",") > -1) {
+        if (t.lastIndexOf(",") > t.lastIndexOf(".")) t = t.replace(/\./g, "").replace(/,/g, ".");
+        else t = t.replace(/,/g, "");
+      }
+      v = t;
+    }
+    var n = parseFloat(v);
+    return isFinite(n) ? n : 0;
+  }
+  M.sayi = sayi;   // arayüz/depo/admin de aynı çözümleyiciyi kullansın
 
   /* ---- KIP (GWP) arama ---- */
   M.gwpBul = function (gazAdi) {
@@ -80,6 +94,8 @@ window.Motor = (function () {
      Her seçenek: { anahtar, etiket, kayit }
      ============================================================ */
   M.kaynakSecenekleri = function (kategori, bolge) {
+    // Listeden kaldırılan eski bölge değerleri (TR/Other2) — bölgesiz say, tüm setleri göster
+    if (bolge === "TR" || bolge === "Other2") bolge = null;
     var sec = [];
     function ekle(etiket, kayit) { sec.push({ anahtar: etiket, etiket: etiket, kayit: kayit }); }
 
@@ -88,9 +104,17 @@ window.Motor = (function () {
         if (r.Fuel_Name) ekle(r.Fuel_Name + "  [" + (r.Category || "—") + "]", r);
       });
     } else if (kategori === "Mobil Yanma - Yakıt") {
-      Depo.set("ef_mobil_yakit").forEach(function (r) {
+      var myTumu = Depo.set("ef_mobil_yakit");
+      myTumu.forEach(function (r) {
         if (bolge && r.Region !== bolge) return;
+        // Karışım yakıtın (E85/B20) biyojenik bileşen satırı ayrıca listelenmez;
+        // fosil satırı seçilince biyojenik payı hesapta otomatik eklenir.
+        if (r.Notes === "Biogenic" && myTumu.some(function (x) {
+          return x !== r && x.Region === r.Region && x.Fuel === r.Fuel &&
+                 x.Vehicle_Engine_Type === r.Vehicle_Engine_Type && x.Notes === "Fossil";
+        })) return;
         var et = (r.Fuel || "") + (r.Vehicle_Engine_Type ? " — " + r.Vehicle_Engine_Type : "") +
+                 (r.Notes === "Biogenic" ? " (%100 biyojenik)" : "") +
                  (bolge ? "" : "  [" + r.Region + "]");
         ekle(et, r);
       });
@@ -126,15 +150,20 @@ window.Motor = (function () {
     // bölge değişmiş olabilir; bölgesiz ara
     sec = M.kaynakSecenekleri(kategori, null);
     for (var j = 0; j < sec.length; j++) if (sec[j].anahtar === anahtar) return sec[j].kayit;
+    // etiket eki değişmiş eski kayıtlar (örn. "(%100 biyojenik)" eki öncesi)
+    function sade(x) { return String(x || "").replace(" (%100 biyojenik)", "").trim(); }
+    for (var k = 0; k < sec.length; k++) if (sade(sec[k].anahtar) === sade(anahtar)) return sec[k].kayit;
     return null;
   };
 
   /* ============================================================
      FAALİYET SATIRI HESABI (Kapsam 1 ve 3)
-     Dönen: { tco2e, co2kg, ch4kg, n2okg, aciklama, hata }
+     Dönen: { tco2e, co2kg, ch4kg, n2okg, biyoCo2kg, aciklama, hata }
+     biyoCo2kg: biyojenik CO2 (GHG Protokolü gereği kapsam DIŞI, ayrı
+     raporlanır; tco2e'ye ve kapsam toplamlarına DAHİL EDİLMEZ).
      ============================================================ */
   M.hesapFaaliyet = function (s) {
-    var bos = { tco2e: 0, co2kg: 0, ch4kg: 0, n2okg: 0, aciklama: "", hata: null };
+    var bos = { tco2e: 0, co2kg: 0, ch4kg: 0, n2okg: 0, biyoCo2kg: 0, aciklama: "", hata: null };
     var miktar = sayi(s.miktar);
     if (!s.kategori) return Object.assign(bos, { hata: "Kategori seçilmedi" });
     if (!miktar) return Object.assign(bos, { hata: "Miktar girilmedi" });
@@ -142,7 +171,7 @@ window.Motor = (function () {
     // Manuel EF girilmişse her kategoride doğrudan kullanılır
     if (sayi(s.manuelEF) > 0) {
       var t = miktar * sayi(s.manuelEF) / 1000;
-      return { tco2e: t, co2kg: t * 1000, ch4kg: 0, n2okg: 0,
+      return { tco2e: t, co2kg: t * 1000, ch4kg: 0, n2okg: 0, biyoCo2kg: 0,
                aciklama: "Manuel EF: " + s.manuelEF + " kg CO2e/" + (s.birim || "birim"), hata: null };
     }
 
@@ -156,12 +185,27 @@ window.Motor = (function () {
     var kayit = M.kaynakKaydi(kat, s.bolge, s.kaynak);
     if (!kayit) return Object.assign(bos, { hata: "Kaynak (yakıt/araç) seçilmedi" });
 
-    var co2kg = 0, ch4kg = 0, n2okg = 0, ef, kts;
+    var co2kg = 0, ch4kg = 0, n2okg = 0, biyoCo2kg = 0, ef, kts;
     if (kat === "Mobil Yanma - Yakıt") {
       kts = birimKatsayi(s.birim, kayit.EF_Unit);
       if (kts == null) return Object.assign(bos, { hata: "Birim (" + s.birim + ") bu EF ile uyumsuz: " + kayit.EF_Unit });
       var m = miktar * kts;
-      co2kg = m * efKg(kayit.CO2_EF, kayit.EF_Unit);
+      if (kayit.Notes === "Biogenic") {
+        // %100 biyoyakıt: CO2'si kapsam dışı (biyojenik), CH4/N2O Kapsam 1'de kalır
+        biyoCo2kg = m * efKg(kayit.CO2_EF, kayit.EF_Unit);
+      } else {
+        co2kg = m * efKg(kayit.CO2_EF, kayit.EF_Unit);
+        // Karışım yakıt (E85/B20): araçta aynı yakıtın biyojenik satırı varsa payı otomatik eklenir
+        var esler = Depo.set("ef_mobil_yakit");
+        for (var bi = 0; bi < esler.length; bi++) {
+          var bx = esler[bi];
+          if (bx !== kayit && bx.Notes === "Biogenic" && bx.Region === kayit.Region &&
+              bx.Fuel === kayit.Fuel && bx.Vehicle_Engine_Type === kayit.Vehicle_Engine_Type) {
+            biyoCo2kg = m * efKg(bx.CO2_EF, bx.EF_Unit || kayit.EF_Unit);
+            break;
+          }
+        }
+      }
       ch4kg = m * efKg(kayit.CH4_EF, "g/x");   // EPA tablosunda g cinsinden
       n2okg = m * efKg(kayit.N2O_EF, "g/x");
       ef = kayit.CO2_EF + " " + kayit.EF_Unit;
@@ -177,13 +221,14 @@ window.Motor = (function () {
       ef = co2ef + " " + co2u;
     }
     var tco2e = (co2kg * 1 + ch4kg * M.gwpCH4() + n2okg * M.gwpN2O()) / 1000;
-    return { tco2e: tco2e, co2kg: co2kg, ch4kg: ch4kg, n2okg: n2okg,
-             aciklama: "EF: " + ef + " (DEFRA/EPA)", hata: null };
+    return { tco2e: tco2e, co2kg: co2kg, ch4kg: ch4kg, n2okg: n2okg, biyoCo2kg: biyoCo2kg,
+             aciklama: "EF: " + ef + " (GHG Protokol Cross-Sector aracı)" +
+                       (biyoCo2kg ? " • biyojenik CO2 ayrı izlenir" : ""), hata: null };
   };
 
-  /* Sabit yanma: IPCC 2006 — kütle (t/kg), hacim (L) veya enerji (GJ/kWh/MWh) */
+  /* Sabit yanma: IPCC 2006 — kütle (t/kg), hacim (L/m³) veya enerji (GJ/kWh/MWh) */
   function hesapSabit(s, miktar) {
-    var bos = { tco2e: 0, co2kg: 0, ch4kg: 0, n2okg: 0, aciklama: "", hata: null };
+    var bos = { tco2e: 0, co2kg: 0, ch4kg: 0, n2okg: 0, biyoCo2kg: 0, aciklama: "", hata: null };
     var kayit = M.kaynakKaydi("Sabit Yanma", null, s.kaynak);
     if (!kayit) return Object.assign(bos, { hata: "Yakıt seçilmedi" });
     var b = (s.birim || "tonne").toLowerCase();
@@ -194,6 +239,12 @@ window.Motor = (function () {
       var yog = sayi(kayit.Liquid_Density_kg_per_L);
       if (!yog) return Object.assign(bos, { hata: "Bu yakıt için yoğunluk (kg/L) tanımlı değil; tonne girin" });
       ton = miktar * yog / 1000;
+    }
+    else if (b === "m3" || b === "m³") {
+      // Gaz yakıtlar (doğal gaz faturası m³): araçtaki gaz yoğunluğu (kg/m³) ile kütleye çevrilir
+      var gazYog = sayi(kayit.Gas_Density_kg_per_m3);
+      if (!gazYog) return Object.assign(bos, { hata: "Bu yakıt için m³ yoğunluğu tanımlı değil; tonne veya kWh girin" });
+      ton = miktar * gazYog / 1000;
     }
     else if (b === "gj") tj = miktar / 1000;
     else if (b === "kwh") tj = miktar * 3.6e-6;
@@ -210,9 +261,15 @@ window.Motor = (function () {
     var n2okg = tj * sayi(kayit.N2O_kg_per_TJ);
     // CO2 kg/TJ boşsa kütle bazlı yedek
     if (!co2kg && ton != null && sayi(kayit.CO2_kg_per_tonne)) co2kg = ton * sayi(kayit.CO2_kg_per_tonne);
+    // Biyokütle yakıtların CO2'si biyojeniktir: kapsam dışı ayrı raporlanır (GHG Protokolü).
+    // İstisna: Turba (Peat) — IPCC 2006 turbayı CO2 muhasebesinde fosil gibi sayar.
+    var biyoCo2kg = 0;
+    if ((kayit.Category || "") === "Biomass" && kayit.Fuel_Name !== "Peat") {
+      biyoCo2kg = co2kg; co2kg = 0;
+    }
     var tco2e = (co2kg + ch4kg * M.gwpCH4() + n2okg * M.gwpN2O()) / 1000;
-    return { tco2e: tco2e, co2kg: co2kg, ch4kg: ch4kg, n2okg: n2okg, enerjiGJ: tj * 1000,
-             aciklama: "IPCC 2006 — NCV " + ncv + " TJ/Gg", hata: null };
+    return { tco2e: tco2e, co2kg: co2kg, ch4kg: ch4kg, n2okg: n2okg, biyoCo2kg: biyoCo2kg, enerjiGJ: tj * 1000,
+             aciklama: "IPCC 2006 — NCV " + ncv + " TJ/Gg" + (biyoCo2kg ? " • biyojenik CO2 ayrı izlenir" : ""), hata: null };
   }
 
   /* ============================================================
@@ -252,7 +309,7 @@ window.Motor = (function () {
     return Depo.set("ef_elektrik").map(function (r) { return r.Region; });
   };
   M.hesapElektrik = function (s) {
-    var sonuc = { ld: 0, pd: 0, sebekeEF: 0, hata: null };
+    var sonuc = { ld: 0, pd: 0, sebekeEF: 0, co2kg: 0, ch4kg: 0, n2okg: 0, hata: null };
     var kwh = sayi(s.kwh);
     if (!kwh) { sonuc.hata = "Tüketim (kWh) girilmedi"; return sonuc; }
     var tablo = Depo.set("ef_elektrik"), g = null;
@@ -263,6 +320,10 @@ window.Motor = (function () {
                 sayi(g.N2O_EF_kg_per_kWh) * M.gwpN2O();
     sonuc.sebekeEF = efKwh;
     sonuc.ld = kwh * efKwh / 1000;
+    // Gaz bazlı kütle dökümü (lokasyona dayalı) — rapor 5.1 gaz tablosuyla tutarlılık için
+    sonuc.co2kg = kwh * sayi(g.CO2_EF_kg_per_kWh);
+    sonuc.ch4kg = kwh * sayi(g.CH4_EF_kg_per_kWh);
+    sonuc.n2okg = kwh * sayi(g.N2O_EF_kg_per_kWh);
     var rec = Math.min(sayi(s.recKwh), kwh);
     var tedarikEF = sayi(s.tedarikciEF);
     var kalan = kwh - rec;
@@ -293,6 +354,7 @@ window.Motor = (function () {
       k2: { ld: 0, pd: 0, isi: 0, kwh: 0, recKwh: 0 },
       k3: { yukYukari: 0, yukAsagi: 0, seyahat: 0, ulasim: 0, diger: 0, toplam: 0 },
       gaz: { co2kg: 0, ch4kg: 0, n2okg: 0, fgazkg: 0, fgazTco2e: 0 },
+      biyojenik: { co2kg: 0, tco2: 0 },   // kapsam DIŞI, ayrı raporlanır
       enerji: { yakitGJ: 0, elektrikGJ: 0, toplamGJ: 0 },
       hatalar: []
     };
@@ -300,6 +362,7 @@ window.Motor = (function () {
       var h = M.hesapFaaliyet(s);
       if (h.hata) { T.hatalar.push((s.no || "?") + ": " + h.hata); return; }
       T.gaz.co2kg += h.co2kg; T.gaz.ch4kg += h.ch4kg; T.gaz.n2okg += h.n2okg;
+      T.biyojenik.co2kg += sayi(h.biyoCo2kg);
       var kat = s.kategori;
       if (kat === "Sabit Yanma") { T.k1.sabit += h.tco2e; if (h.enerjiGJ) T.enerji.yakitGJ += h.enerjiGJ; }
       else if (kat === "Mobil Yanma - Yakıt" || kat === "Mobil Yanma - Mesafe") T.k1.mobil += h.tco2e;
@@ -317,8 +380,11 @@ window.Motor = (function () {
       var h = M.hesapElektrik(s);
       if (h.hata) { T.hatalar.push((s.no || "?") + ": " + h.hata); return; }
       T.k2.ld += h.ld; T.k2.pd += h.pd;
+      // Kapsam 2 gazları da gaz tablosuna dahil (lokasyona dayalı) — 5.1 toplamıyla tutarlılık
+      T.gaz.co2kg += h.co2kg; T.gaz.ch4kg += h.ch4kg; T.gaz.n2okg += h.n2okg;
       T.k2.kwh += sayi(s.kwh); T.k2.recKwh += Math.min(sayi(s.recKwh), sayi(s.kwh));
     });
+    T.biyojenik.tco2 = T.biyojenik.co2kg / 1000;
     T.k1.toplam = T.k1.sabit + T.k1.mobil + T.k1.proses + T.k1.kacak;
     T.k3.toplam = T.k3.yukYukari + T.k3.yukAsagi + T.k3.seyahat + T.k3.ulasim + T.k3.diger;
     T.k2ld = T.k2.ld + T.k2.isi;
@@ -626,6 +692,7 @@ window.Motor = (function () {
       ozet: {
         kapsam1: T.k1.toplam, kapsam2_ld: T.k2ld, kapsam2_pd: T.k2pd, kapsam3: T.k3.toplam,
         toplam_ld: T.toplamLD, toplam_pd: T.toplamPD,
+        biyojenik_co2_t: T.biyojenik.tco2,   // kapsam dışı, ayrı raporlanır
         enerji_GJ: T.enerji.toplamGJ,
         yogunluk_fte: T.yogunlukFTE, yogunluk_hasilat: T.yogunlukHasilat
       },
@@ -643,6 +710,246 @@ window.Motor = (function () {
     var ad = "hesap-defteri-" + String(d.sirket || "sirket").toLowerCase().replace(/[^a-z0-9]+/g, "-").replace(/^-|-$/g, "") +
              (d.yil ? "-" + d.yil : "") + ".json";
     Depo.dosyaIndir(ad, JSON.stringify(d, null, 1), "application/json");
+  };
+
+  /* ============================================================
+     TSRS MEVZUAT UYUM DENETİMİ (rapor doğrulama katmanı)
+     27 makine-uygulanabilir kural; rapor üreticisi bunları çalıştırıp
+     "Uyum Kontrolü" paneli basar ve uygunluk beyanını şarta bağlar.
+     Saf fonksiyondur (DOM bilmez); mevcut durumlar()/uyumMatrisi() korunur.
+     ============================================================ */
+  function PASS()  { return { durum: "gecti" }; }
+  function FAIL(m) { return { durum: "eksik", mesaj: m }; }
+  function WARN(m) { return { durum: "uyari", mesaj: m }; }
+  function NA(m)   { return { durum: "na", mesaj: m || "Uygulanamaz" }; }
+  function dolu(x) { return x != null && String(x).trim() !== ""; }
+  function modDolu(ctx, modId) {
+    var mv = ctx.mod(modId) || {};
+    var a = mv.anlatilar || {};
+    return Object.keys(a).some(function (k) { return (a[k] || "").trim(); }) || (mv.kayitlar || []).length > 0;
+  }
+  function ilkYilMuaf(ctx) {
+    var p = ctx.p || {};
+    if (p.ilkRapor && /evet/i.test(p.ilkRapor)) return true;
+    return (p.muafiyetler || []).some(function (m) { return /karşılaştırmalı|ilk yıl|ilk uygulama/i.test(m); });
+  }
+  function cilt10Secili(ctx) {
+    return (ctx.ciltler || []).some(function (c) { return c.no === 10; });
+  }
+
+  function metrikDoluKod(kod) { var v = Depo.metrikVeri ? Depo.metrikVeri(kod) : {}; return dolu(v.deger) || dolu(v.metin); }
+
+  M.UYUM_KURALLARI = [
+    { id: "K01", kategori: "Metrikler", sertlik: "zorunlu", tsrsRef: "TSRS 2 md.29(a)(i)", bolum: "5.1 Emisyon Özeti",
+      aciklama: "Kapsam 1/2/3 ayrı ve brüt (tCO2e) raporlanmalı",
+      kontrol: function (c) { return (c.T.k1.toplam > 0 || c.T.k2ld > 0 || c.T.k3.toplam > 0)
+        ? PASS() : FAIL("Hiç emisyon verisi yok; Faaliyet/Elektrik sayfalarına veri girin."); } },
+    { id: "K02", kategori: "Metrikler", sertlik: "zorunlu", tsrsRef: "TSRS 2 md.29(a)(v)", bolum: "5.1 Emisyon Özeti",
+      aciklama: "Kapsam 2 lokasyona-dayalı ayrıca açıklanmalı",
+      kontrol: function (c) { return c.T.k2.kwh > 0 ? PASS() : NA("Elektrik tüketimi girilmemiş"); } },
+    { id: "K03", kategori: "Metrikler", sertlik: "oneri", tsrsRef: "TSRS 2 md.29(a)(iv)", bolum: "1.2 Organizasyonel Sınır",
+      aciklama: "Kapsam 1/2 konsolide grup ile diğer yatırımlar arasında ayrıştırılmalı",
+      kontrol: function (c) { return dolu(c.p.konsolidasyon)
+        ? PASS() : WARN("Konsolide grup/diğer yatırım ayrıştırması veya sınır açıklaması girilmemiş (Şirket Profili)."); } },
+    { id: "K04", kategori: "Metodoloji", sertlik: "zorunlu", tsrsRef: "TSRS 2 md.29(a)(ii)", bolum: "1.3 Metodoloji",
+      aciklama: "Ölçüm çerçevesi / metodoloji beyanı (GHG Protokolü 2004)",
+      kontrol: function (c) { return dolu(c.ayar("metodoloji_beyani")) ? PASS() : FAIL("Metodoloji beyanı boş (Yönetim Paneli → Görünüm ve Metinler)."); } },
+    { id: "K05", kategori: "Genel", sertlik: "zorunlu", tsrsRef: "TSRS 1 md.72", bolum: "1.5 Uygunluk Beyanı",
+      aciklama: "Açık ve koşulsuz uygunluk beyanı (tüm zorunlular sağlandığında)",
+      kontrol: function () { return PASS(); } },   // durum uyumDenetim'de türetilir
+    { id: "K06", kategori: "Dört Direk", sertlik: "zorunlu", tsrsRef: "TSRS 1 md.25-26", bolum: "2–5 (Dört Direk)",
+      aciklama: "Dört temel içerik (Yönetişim, Strateji, Risk Yönetimi, Metrikler) doldurulmalı",
+      kontrol: function (c) {
+        var eksik = ["yonetisim", "strateji", "risk_yonetimi", "hedefler"].filter(function (m) { return !modDolu(c, m); });
+        return eksik.length === 0 ? PASS() : FAIL("Eksik direk(ler): " + eksik.join(", ")); } },
+    { id: "K07", kategori: "Strateji", sertlik: "zorunlu", tsrsRef: "TSRS 2 md.22", bolum: "3.3 Dirençlilik/Senaryo",
+      aciklama: "İklim dirençliliği / senaryo analizi açıklanmalı",
+      kontrol: function (c) { return modDolu(c, "direnclilik") ? PASS() : FAIL("Dirençlilik/Senaryo Analizi bölümü boş."); } },
+    { id: "K08", kategori: "Metrikler", sertlik: "zorunlu", tsrsRef: "TSRS 2 md.29(f)", bolum: "5.1 İç Karbon Fiyatı",
+      aciklama: "İç (dahili) karbon fiyatı kullanımı + fiyat açıklanmalı",
+      kontrol: function (c) { return dolu(c.p.icKarbonFiyati)
+        ? PASS() : WARN("İç karbon fiyatı belirtilmedi (Şirket Profili). Kullanılmıyorsa raporda 'uygulanmamaktadır' belirtin."); } },
+    { id: "K09", kategori: "Hedefler", sertlik: "zorunlu", tsrsRef: "TSRS 2 md.33", bolum: "5.4 İklim Hedefleri",
+      aciklama: "Her hedef için baz dönem, hedef dönem ve kapsam belirtilmeli",
+      kontrol: function (c) {
+        var h = (c.mod("hedefler").kayitlar) || [];
+        if (!h.length) return WARN("Henüz iklim hedefi tanımlanmadı.");
+        var eksik = h.filter(function (x) { return !dolu(x.baz_yil) || !dolu(x.hedef_yil) || !dolu(x.kapsam); });
+        return eksik.length ? WARN(eksik.length + " hedefte baz/hedef yılı veya kapsam eksik.") : PASS(); } },
+    { id: "K10", kategori: "Hedefler", sertlik: "oneri", tsrsRef: "TSRS 2 md.35", bolum: "5.4 İklim Hedefleri",
+      aciklama: "Net hedef varsa ilgili brüt hedef de ayrıca verilmeli",
+      kontrol: function (c) {
+        var h = (c.mod("hedefler").kayitlar) || [];
+        var net = h.some(function (x) { return /net/i.test(x.brut_net || ""); });
+        return net ? WARN("Net hedef tespit edildi; brüt hedefin de ayrıca verildiğini doğrulayın.") : PASS(); } },
+    { id: "K11", kategori: "Karşılaştırma", sertlik: "zorunlu", tsrsRef: "TSRS 1 md.70", bolum: "5.1 Emisyon Özeti",
+      aciklama: "Önceki dönem karşılaştırmalı bilgisi verilmeli (ilk yıl muaf)",
+      kontrol: function (c) {
+        if (ilkYilMuaf(c)) return NA("İlk uygulama yılı — karşılaştırmalı bilgi muafiyeti (TSRS 1 E3-E4).");
+        return (dolu(c.p.oncekiK1) || dolu(c.p.oncekiK2) || dolu(c.p.oncekiK3))
+          ? PASS() : WARN("Önceki dönem emisyon verisi girilmemiş (Şirket Profili)."); } },
+    { id: "K12", kategori: "Metodoloji", sertlik: "zorunlu", tsrsRef: "TSRS 1 md.77-82", bolum: "5.6 Tahmin Belirsizliği",
+      aciklama: "Yüksek ölçüm/tahmin belirsizliği açıklanmalı",
+      kontrol: function (c) { return c.T.toplamLD > 0 ? PASS() : NA("Emisyon verisi yok"); } },
+    { id: "K13", kategori: "Strateji", sertlik: "zorunlu", tsrsRef: "TSRS 2 md.15-21", bolum: "3.1 Strateji",
+      aciklama: "Finansal etkiler açıklanmalı (nicel veremiyorsa gerekçe + nitel)",
+      kontrol: function (c) { return modDolu(c, "strateji") ? PASS() : FAIL("Strateji/finansal etki bölümü boş."); } },
+    { id: "K14", kategori: "Genel", sertlik: "zorunlu", tsrsRef: "TSRS 1 md.64", bolum: "1.1 Künye",
+      aciklama: "Raporlama dönemi (başlangıç/bitiş) belirtilmeli",
+      kontrol: function (c) { return (dolu(c.p.donemBas) && dolu(c.p.donemBit)) ? PASS() : FAIL("Raporlama dönemi tarihleri eksik."); } },
+    { id: "K15", kategori: "Genel", sertlik: "zorunlu", tsrsRef: "TSRS 1 md.20", bolum: "1.2 Organizasyonel Sınır",
+      aciklama: "Raporlama (konsolidasyon) sınırı belirtilmeli",
+      kontrol: function (c) { return dolu(c.p.sinir) ? PASS() : FAIL("Konsolidasyon yaklaşımı/sınırı seçilmemiş."); } },
+    { id: "K16", kategori: "Genel", sertlik: "oneri", tsrsRef: "TSRS 1 md.23", bolum: "1.1 Künye",
+      aciklama: "Para birimi finansal tablolarla tutarlı olmalı",
+      kontrol: function (c) { return dolu(c.ayar("para_birimi")) ? PASS() : WARN("Para birimi tanımlı değil."); } },
+    { id: "K17", kategori: "Genel", sertlik: "zorunlu", tsrsRef: "TSRS 1 md.20", bolum: "1.1 Künye",
+      aciklama: "Şirket künyesi (unvan, vergi/MERSİS, NACE) tam olmalı",
+      kontrol: function (c) {
+        var eksik = ["unvan", "vergiNo", "nace"].filter(function (k) { return !dolu(c.p[k]); });
+        return eksik.length ? FAIL("Künye eksik: " + eksik.join(", ")) : PASS(); } },
+    { id: "K18", kategori: "Sektörel", sertlik: "zorunlu", tsrsRef: "TSRS 2 md.31 • Cilt 10", bolum: "5.3 Sektörel Metrikler",
+      aciklama: "Madencilik (Cilt 10) seçiliyse sektörel metrikler doldurulmalı",
+      kontrol: function (c) {
+        if (!cilt10Secili(c)) return NA("Cilt 10 (Madencilik) seçili değil.");
+        var ozet = Depo.metrikOzet ? Depo.metrikOzet() : { tam: 0, toplam: 0 };
+        return ozet.tam > 0 ? PASS() : WARN("Sektör metrikleri henüz doldurulmadı (" + ozet.tam + "/" + ozet.toplam + ")."); } },
+    { id: "K19", kategori: "Sektörel", sertlik: "zorunlu", tsrsRef: "Cilt 10 EM-MM-110a.1", bolum: "5.3 Sektörel Metrikler",
+      aciklama: "EM-MM-110a.1: brüt Kapsam 1 + emisyon düzenlemesi kapsamındaki yüzde",
+      kontrol: function (c) { if (!cilt10Secili(c)) return NA("Cilt 10 seçili değil.");
+        return metrikDoluKod("EM-MM-110a.1") ? PASS() : WARN("EM-MM-110a.1 (brüt K1 + düzenleme %) girilmemiş."); } },
+    { id: "K20", kategori: "Sektörel", sertlik: "zorunlu", tsrsRef: "Cilt 10 EM-MM-130a.1", bolum: "5.3 Sektörel Metrikler",
+      aciklama: "EM-MM-130a.1: toplam enerji (GJ), şebeke %, yenilenebilir %",
+      kontrol: function (c) { if (!cilt10Secili(c)) return NA("Cilt 10 seçili değil.");
+        return metrikDoluKod("EM-MM-130a.1") ? PASS() : WARN("EM-MM-130a.1 (enerji) girilmemiş."); } },
+    { id: "K21", kategori: "Sektörel", sertlik: "zorunlu", tsrsRef: "Cilt 10 EM-MM-140a.1", bolum: "5.3 Sektörel Metrikler",
+      aciklama: "EM-MM-140a.1: çekilen/tüketilen su + su stresi %",
+      kontrol: function (c) { if (!cilt10Secili(c)) return NA("Cilt 10 seçili değil.");
+        return metrikDoluKod("EM-MM-140a.1") ? PASS() : WARN("EM-MM-140a.1 (su) girilmemiş."); } },
+    { id: "K22", kategori: "Genel", sertlik: "oneri", tsrsRef: "TSRS 1 md.B29", bolum: "Genel",
+      aciklama: "Veri olmayan zorunlu alanlar [VERİ BEKLENİYOR] ile işaretlenir (gizlenmez)",
+      kontrol: function () { return PASS(); } },   // rapor üreticisi deg() ile sağlar
+    { id: "K23", kategori: "Genel", sertlik: "oneri", tsrsRef: "TSRS 1 E3-E6", bolum: "1.4 Geçiş Muafiyetleri",
+      aciklama: "Kullanılan geçiş muafiyetleri açıkça beyan edilmeli",
+      kontrol: function (c) { return (c.p.muafiyetler || []).length ? PASS() : NA("Geçiş muafiyeti kullanılmıyor."); } },
+    { id: "K24", kategori: "Genel", sertlik: "oneri", tsrsRef: "TSRS 1 md.37", bolum: "Genel",
+      aciklama: "Aşırı maliyet/çaba veya orantılılıkla sınırlanan açıklamalar gerekçelenmeli",
+      kontrol: function () { return PASS(); } },   // gerekçe serbest metinde; bilgilendirme
+    { id: "K25", kategori: "Genel", sertlik: "zorunlu", tsrsRef: "TSRS 1 md.60-63", bolum: "Kapak / 1. Giriş",
+      aciklama: "Rapor 'TSRS Uyumlu Sürdürülebilirlik Raporu' başlığıyla ayrı bölüm olarak sunulmalı",
+      kontrol: function () { return PASS(); } },   // kapak/başlık üretici tarafından garanti
+    { id: "K26", kategori: "Strateji", sertlik: "zorunlu", tsrsRef: "TSRS 2 md.10-12", bolum: "3.2 Risk ve Fırsatlar",
+      aciklama: "Risk/fırsatlar fiziksel/geçiş ve zaman dilimiyle sınıflanmalı",
+      kontrol: function (c) {
+        var r = (c.mod("risk_firsat").kayitlar) || [];
+        if (!r.length) return WARN("Risk/fırsat kaydı girilmemiş.");
+        var eksik = r.filter(function (x) { return !dolu(x.tur) || !dolu(x.zaman); });
+        return eksik.length ? WARN(eksik.length + " riskte tür/zaman dilimi eksik.") : PASS(); } },
+    { id: "K27", kategori: "Strateji", sertlik: "oneri", tsrsRef: "TSRS 2 md.14", bolum: "3.1 Strateji (Geçiş Planı)",
+      aciklama: "İklimle ilgili geçiş planı açıklanmalı",
+      kontrol: function (c) { return modDolu(c, "strateji") ? PASS() : WARN("Geçiş planı / strateji bölümü boş."); } }
+  ];
+
+  M.uyumDenetim = function () {
+    var ctx = {
+      p: Depo.veri.profil || {},
+      T: M.toplamlar(),
+      mod: function (id) { return Depo.modulVeri(id); },
+      ayar: function (k) { return Depo.ayar(k); },
+      ciltler: Depo.seciliCiltler ? Depo.seciliCiltler() : []
+    };
+    var sonuc = M.UYUM_KURALLARI.map(function (k) {
+      var r;
+      try { r = k.kontrol(ctx); } catch (e) { r = { durum: "eksik", mesaj: "Kontrol hatası: " + (e.message || e) }; }
+      return { id: k.id, aciklama: k.aciklama, tsrsRef: k.tsrsRef, sertlik: k.sertlik,
+               kategori: k.kategori, bolum: k.bolum || "", durum: r.durum, mesaj: r.mesaj || "" };
+    });
+    // Zorunlu hata (K05 hariç — K05 bunun türevidir)
+    var zorunluHata = sonuc.some(function (s) { return s.id !== "K05" && s.sertlik === "zorunlu" && s.durum === "eksik"; });
+    // K05 (uygunluk beyanı) türetilir: tüm zorunlular sağlandıysa geçti, değilse eksik
+    sonuc.forEach(function (s) {
+      if (s.id === "K05") {
+        s.durum = zorunluHata ? "eksik" : "gecti";
+        s.mesaj = zorunluHata ? "Eksik zorunlu açıklamalar nedeniyle koşulsuz uygunluk beyanı verilemez." : "";
+      }
+    });
+    return {
+      kurallar: sonuc,
+      ozet: {
+        gecen: sonuc.filter(function (s) { return s.durum === "gecti"; }).length,
+        uyari: sonuc.filter(function (s) { return s.durum === "uyari"; }).length,
+        eksik: sonuc.filter(function (s) { return s.durum === "eksik"; }).length,
+        na:    sonuc.filter(function (s) { return s.durum === "na"; }).length
+      },
+      uygunlukVerilebilir: !zorunluHata
+    };
+  };
+
+  /* ============================================================
+     FAALİYET DÖKÜMÜ — tüm faaliyet/soğutucu/elektrik kayıtlarını
+     kapsam'a göre sınıflandırıp tek, detaylı tabloya toplar.
+     CSV/XLSX dışa aktarımının veri kaynağıdır (depo.js export'ları kullanır).
+     Dönen: { kolonlar:[{anahtar,etiket}], satirlar:[{...}] } — ham değerler.
+     ============================================================ */
+  M.faaliyetDokumu = function () {
+    var v = Depo.veri;
+    var kolonlar = [
+      { anahtar: "no", etiket: "Kayıt No" },
+      { anahtar: "kapsam", etiket: "Kapsam" },
+      { anahtar: "tip", etiket: "Veri Tipi" },
+      { anahtar: "ad", etiket: "Tesis / Ekipman / Sayaç" },
+      { anahtar: "kategori", etiket: "Kategori" },
+      { anahtar: "kaynak", etiket: "Kaynak / Yakıt / Gaz / Şebeke" },
+      { anahtar: "miktar", etiket: "Miktar" },
+      { anahtar: "birim", etiket: "Birim" },
+      { anahtar: "donem", etiket: "Dönem" },
+      { anahtar: "bolge", etiket: "Bölge" },
+      { anahtar: "co2kg", etiket: "CO2 (kg)" },
+      { anahtar: "ch4kg", etiket: "CH4 (kg)" },
+      { anahtar: "n2okg", etiket: "N2O (kg)" },
+      { anahtar: "biyoCo2kg", etiket: "Biyojenik CO2 (kg, kapsam dışı)" },
+      { anahtar: "tco2eLD", etiket: "tCO2e (Lokasyon)" },
+      { anahtar: "tco2ePD", etiket: "tCO2e (Piyasa)" },
+      { anahtar: "ef", etiket: "EF / Metodoloji" },
+      { anahtar: "durum", etiket: "Durum" }
+    ];
+    var satirlar = [];
+    function miktarSayi(x) { var n = parseFloat(x); return isFinite(n) ? n : (x || ""); }
+
+    (v.faaliyet || []).forEach(function (s) {
+      var h = M.hesapFaaliyet(s);
+      var kapsam = M.kategoriKapsami(s.kategori);
+      var kaynakAd = (sayi(s.manuelEF) > 0) ? ("Manuel EF: " + s.manuelEF + " kgCO2e/" + (s.birim || "birim")) : (s.kaynak || "");
+      satirlar.push({
+        no: s.no || "", kapsam: kapsam, tip: "Faaliyet", ad: s.tesis || "", kategori: s.kategori || "",
+        kaynak: kaynakAd, miktar: miktarSayi(s.miktar), birim: s.birim || "", donem: s.donem || "", bolge: s.bolge || "",
+        co2kg: h.hata ? "" : h.co2kg, ch4kg: h.hata ? "" : h.ch4kg, n2okg: h.hata ? "" : h.n2okg,
+        biyoCo2kg: h.hata ? "" : (h.biyoCo2kg || ""),
+        tco2eLD: h.hata ? "" : h.tco2e, tco2ePD: h.hata ? "" : h.tco2e,
+        ef: h.hata ? "" : (h.aciklama || ""), durum: h.hata ? ("Hata: " + h.hata) : "Hesaplandı"
+      });
+    });
+    (v.sogutucu || []).forEach(function (s) {
+      var h = M.hesapSogutucu(s);
+      satirlar.push({
+        no: s.no || "", kapsam: 1, tip: "Soğutucu/Kaçak", ad: s.ekipman || "", kategori: "Kaçak Emisyon (F-gaz)",
+        kaynak: s.gaz || "", miktar: h.hata ? "" : h.kacakKg, birim: "kg (kaçak)", donem: s.donem || "", bolge: s.bolge || "",
+        co2kg: "", ch4kg: "", n2okg: "", biyoCo2kg: "", tco2eLD: h.hata ? "" : h.tco2e, tco2ePD: h.hata ? "" : h.tco2e,
+        ef: h.hata ? "" : ("KIP " + M.fmt(h.gwp, 0) + " • " + (s.yontem || "")), durum: h.hata ? ("Hata: " + h.hata) : "Hesaplandı"
+      });
+    });
+    (v.elektrik || []).forEach(function (s) {
+      var h = M.hesapElektrik(s);
+      var efMetin = h.hata ? "" : (M.fmt(h.sebekeEF, 4) + " kgCO2e/kWh" + (sayi(s.recKwh) ? (" • REC " + M.fmt(sayi(s.recKwh), 0) + " kWh") : ""));
+      satirlar.push({
+        no: s.no || "", kapsam: 2, tip: "Elektrik", ad: s.tesis || "", kategori: "Satın Alınan Elektrik",
+        kaynak: s.sebeke || "", miktar: miktarSayi(s.kwh), birim: "kWh", donem: s.donem || "", bolge: s.sebeke || "",
+        co2kg: h.hata ? "" : h.co2kg, ch4kg: h.hata ? "" : h.ch4kg, n2okg: h.hata ? "" : h.n2okg,
+        biyoCo2kg: "", tco2eLD: h.hata ? "" : h.ld, tco2ePD: h.hata ? "" : h.pd,
+        ef: efMetin, durum: h.hata ? ("Hata: " + h.hata) : "Hesaplandı"
+      });
+    });
+    return { kolonlar: kolonlar, satirlar: satirlar };
   };
 
   return M;
