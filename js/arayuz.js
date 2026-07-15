@@ -299,6 +299,8 @@ window.UI = (function () {
       { yol: "araclar", ad: "IPCC Hesap Araçları", ikon: "⚙", ciz: cizAraclar, ref: "CHP (kojenerasyon) • gelişmiş HFC/PFC • belirsizlik" },
       { grup: "Veri Girişi" },
       { yol: "profil",   ad: "Şirket Profili",            ikon: "▣", ciz: cizProfil, durum: "profil", ref: "TSRS 1 md. 20, 27, 60-69" },
+      { yol: "indeks",   ad: "INDEX", ikon: "▦", ciz: function (k) { Indeks.ciz(k); },
+        ref: "Kurumsal veri yönetim indeksi — organizasyon hiyerarşisi • RFI takibi • doküman • kanıt • matris" },
       { yol: "faaliyet", ad: "Faaliyet Verisi (K1 ve K3)", ikon: "▲", ciz: cizFaaliyet, durum: "faaliyet", ref: "Kapsam 1 ve 3 — GHG Protokolü Böl. 4 ve 15" },
       { yol: "sogutucu", ad: "Soğutucu / Kaçak Gazlar",   ikon: "❄", ciz: cizSogutucu, durum: "sogutucu", ref: "Kapsam 1 — IPCC 2006 Cilt 3 Böl. 7" },
       { yol: "elektrik", ad: "Kapsam 2 — Elektrik",       ikon: "⚡", ciz: cizElektrik, durum: "elektrik", ref: "TSRS 2 md. 29(a)(ii)-(iii) — ikili raporlama" },

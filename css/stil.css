@@ -306,3 +306,72 @@ table.veri .co2e{font-weight:600;color:var(--antrasit)}
   .kayit-rozet{display:none}   /* dar ekranda üst barı sıkıştırmasın */
   .banner{padding:9px 12px}
 }
+
+/* ---- INDEX / Organizasyon ağacı ---- */
+.idx-izgara{display:grid;grid-template-columns:minmax(0,1fr) 340px;gap:16px;align-items:start}
+@media (max-width:1080px){.idx-izgara{grid-template-columns:1fr}}
+.idx-agac{display:flex;flex-direction:column}
+.idx-dugum{display:flex;align-items:center;gap:8px;padding:6px 8px;border-radius:var(--radius);cursor:pointer;
+  border-left:3px solid transparent;min-height:34px}
+.idx-dugum:hover{background:var(--yuzey-2)}
+.idx-dugum.secili{background:rgba(180,100,45,.10);border-left-color:var(--bakir)}
+.idx-ac{background:none;border:none;font:inherit;font-size:11px;color:var(--soluk);cursor:pointer;
+  width:18px;flex:none;padding:0;line-height:1}
+.idx-ac:hover{color:var(--metin)}
+.idx-etiketler{display:flex;align-items:center;gap:8px;flex-wrap:wrap;min-width:0;flex:1}
+.idx-ad{font-weight:600;font-size:13.5px}
+.idx-id{font-size:11px;color:var(--soluk);font-variant-numeric:tabular-nums;letter-spacing:.4px}
+.idx-mini{font-size:11.5px;color:var(--soluk);white-space:nowrap}
+.idx-islem{display:none;gap:4px;flex:none;margin-left:auto}
+.idx-dugum:hover .idx-islem,.idx-dugum.secili .idx-islem{display:flex}
+.idx-islem .btn.kucuk{padding:2px 7px;font-size:11.5px}
+.idx-detay{position:sticky;top:16px}
+.idx-kirinti{font-size:11.5px;color:var(--soluk);line-height:1.6}
+.idx-kirinti a{color:var(--bakir)}
+.idx-detay-satir{display:grid;grid-template-columns:150px 1fr;gap:8px;padding:5px 0;
+  border-bottom:1px solid var(--yuzey-2);font-size:12.5px}
+.idx-detay-etiket{color:var(--soluk);font-size:11.5px;font-weight:600;letter-spacing:.3px}
+.idx-alt-birim{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:var(--radius);
+  font-size:12.5px;color:var(--metin)}
+.idx-alt-birim:hover{background:var(--yuzey-2);text-decoration:none}
+a.idx-ad{color:var(--metin)}
+a.idx-ad:hover{color:var(--bakir);text-decoration:none}
+.idx-mini-gec{color:var(--oksit);font-weight:600}
+/* Birim sekmeleri (dinamik) + RFI Takibi */
+.idx-birim-sekme{display:inline-flex;align-items:center;gap:2px}
+.idx-sekme-kapat{margin-left:6px;color:var(--soluk);font-weight:700;padding:0 4px;border-radius:2px;line-height:1.2}
+.idx-sekme-kapat:hover{color:var(--oksit);background:#F3E3DF}
+.idx-birim-ozet{display:flex;flex-wrap:wrap;gap:8px 14px;align-items:center;font-size:12.5px}
+.admin-arac select{font:inherit;font-size:13px;padding:7px 9px;border:1px solid #C8CBC3;
+  border-radius:var(--radius);background:var(--yuzey);max-width:210px}
+.idx-durum-sec{font:inherit;font-size:12px;padding:4px 6px;border:1px solid #C8CBC3;
+  border-radius:var(--radius);background:var(--giris);max-width:180px}
+tr.idx-gecikmis td{background:#FBF1EF}
+.idx-vade-uyari{color:var(--oksit);font-size:11px;font-weight:600;white-space:nowrap;margin-top:2px}
+.idx-talep{color:var(--soluk);font-size:11.5px;margin-top:2px;line-height:1.4;max-width:420px}
+/* Doküman Kaydı: işaretlemeli listeler + kalem çipleri */
+.idx-onay-izgara{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:3px 14px;
+  max-height:210px;overflow:auto;border:1px solid var(--cizgi);padding:8px 10px;
+  border-radius:var(--radius);background:var(--yuzey-2)}
+label.idx-onay{display:flex;gap:7px;align-items:flex-start;font-size:12px;font-weight:400;
+  color:var(--metin);cursor:pointer;line-height:1.45}
+label.idx-onay input{margin-top:2px;flex:none;accent-color:var(--bakir)}
+label.idx-onay:hover{color:var(--bakir)}
+.idx-cip{display:inline-block;background:var(--yuzey-2);border:1px solid var(--cizgi);
+  border-radius:10px;padding:1px 8px;font-size:11px;margin:1px 2px;white-space:nowrap;
+  font-variant-numeric:tabular-nums}
+/* Veri Matrisi: RFI × Birim durum hücreleri */
+.idx-lejant{display:flex;gap:14px;flex-wrap:wrap;align-items:center;font-size:11.5px;color:var(--soluk);margin-left:auto}
+.idx-lejant>span{display:inline-flex;align-items:center;gap:5px}
+.idx-hucre{display:inline-block;width:20px;height:14px;border-radius:3px;border:1px solid rgba(0,0,0,.12);
+  padding:0;cursor:pointer;vertical-align:middle}
+.idx-hucre.tam{background:var(--malakit)}
+.idx-hucre.kismi{background:var(--altin)}
+.idx-hucre.bos{background:#D9DBD4}
+.idx-hucre.uyari{background:var(--oksit)}
+.idx-hucre.yok{background:transparent;border-style:dashed;cursor:default}
+button.idx-hucre:hover{outline:2px solid var(--bakir);outline-offset:1px}
+table.idx-matris th.idx-mat-bas{font-size:10px;letter-spacing:.2px;padding:6px 5px;text-align:center}
+table.idx-matris td.idx-mat-hucre{text-align:center;padding:3px 5px}
+table.idx-matris td.idx-mat-kalem{white-space:nowrap;font-size:12px;position:sticky;left:0;background:var(--yuzey)}
+table.idx-matris tbody tr:hover td.idx-mat-kalem{background:var(--yuzey-2)}
