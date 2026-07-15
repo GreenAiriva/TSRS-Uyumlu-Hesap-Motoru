@@ -20,6 +20,7 @@ window.Depo = (function () {
       elektrik: [],   // Kapsam 2 elektrik satırları
       moduller: {},   // TSRS modülleri: { modulId: { anlatilar:{}, kayitlar:[] } }
       sektorMetrik: {}, // Sektör cilt metrikleri: { metrikKodu: { deger, birim, yontem, not } }
+      indeks: { org: [], rfi: [], dokuman: [], kanit: [], sayac: {} }, // Kurumsal veri yönetim indeksi (js/indeks.js)
       sayac: 1
     };
   };
@@ -88,7 +89,8 @@ window.Depo = (function () {
   function ozetUret(patch) {
     var etiket = {
       profil: "Şirket profili", faaliyet: "Faaliyet verisi", sogutucu: "Soğutucu/kaçak",
-      elektrik: "Kapsam 2 elektrik", moduller: "TSRS açıklamaları", sektorMetrik: "Sektör metrikleri"
+      elektrik: "Kapsam 2 elektrik", moduller: "TSRS açıklamaları", sektorMetrik: "Sektör metrikleri",
+      indeks: "INDEX (organizasyon/RFI/doküman/kanıt)"
     };
     var kokler = {};
     (patch || []).forEach(function (op) {
