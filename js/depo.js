@@ -457,10 +457,16 @@ window.Depo = (function () {
     return ozet;
   };
 
-  /* ---- Kayıt no üretici ---- */
-  d.yeniNo = function (onek) {
-    var n = d.veri.sayac++;
-    return onek + "-" + String(n).padStart(3, "0");
+  /* ---- Kayıt no üretici ----
+     dizi verilirse o listedeki mevcut no'larla çakışan numaralar atlanır
+     (kullanıcı formdan elle no girebildiği için sayaç ile çakışma olabilir) */
+  d.yeniNo = function (onek, dizi) {
+    var no;
+    do {
+      no = onek + "-" + String(d.veri.sayac++).padStart(3, "0");
+    } while (dizi && Array.isArray(d.veri[dizi]) &&
+             d.veri[dizi].some(function (k) { return k && k.no === no; }));
+    return no;
   };
 
   /* ---- Yedekleme ---- */
@@ -637,7 +643,7 @@ window.Depo = (function () {
           parseFloat(cozum.deger).toLocaleString("tr-TR") + " olarak okundu; yanlışsa kaydı düzeltin.");
       }
       var kayit = {
-        no: d.yeniNo("F"),
+        no: d.yeniNo("F", "faaliyet"),
         tesis: iTesis > -1 ? h[iTesis] : "(CSV içe aktarım)",
         kategori: h[iKat],
         kaynak: iKaynak > -1 ? h[iKaynak] : "",
@@ -865,7 +871,7 @@ window.Depo = (function () {
       (paket[dz] || []).forEach(function (kayit) {
         var ak = diziAnahtar(dz, kayit);
         if (d.veri[dz].some(function (x) { return diziAnahtar(dz, x) === ak; })) { sonuc.dedupAtlanan++; return; }
-        if (!kayit.no) kayit.no = d.yeniNo(onek);
+        if (!kayit.no) kayit.no = d.yeniNo(onek, dz);
         // Belge dayanağı ayrı alanda (_kaynak); "kaynak" gerçek veri alanıdır (ör. yakıt adı)
         if (kayit._kaynak) { kayit.aciklama = (kayit.aciklama ? kayit.aciklama + " " : "") + "[Kaynak: " + kayit._kaynak + "]"; delete kayit._kaynak; }
         d.veri[dz].push(kayit);

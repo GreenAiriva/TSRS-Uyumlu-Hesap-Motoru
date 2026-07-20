@@ -347,6 +347,41 @@ window.Motor = (function () {
     return 1;
   };
 
+  /* Birim (INDEX organizasyon ağacı) bazında Kapsam 1-2 dağılımı.
+     Anahtar: kayıttaki birimId ("" = birime atanmamış). Kapsam 3 dağılıma
+     girmez; hesaplanamayan kayıtlar toplamlarda olduğu gibi burada da atlanır. */
+  M.birimDagilimi = function () {
+    var d = {};
+    function g(id) {
+      var k = id || "";
+      if (!d[k]) d[k] = { k1: 0, k2ld: 0, k2pd: 0, kayit: 0 };
+      return d[k];
+    }
+    (Depo.veri.faaliyet || []).forEach(function (s) {
+      var h = M.hesapFaaliyet(s);
+      if (h.hata) return;
+      var kap = M.kategoriKapsami(s.kategori);
+      if (kap === 3) return;
+      var b = g(s.birimId);
+      b.kayit++;
+      if (kap === 1) b.k1 += h.tco2e;
+      else { b.k2ld += h.tco2e; b.k2pd += h.tco2e; }   // satın alınan ısı/buhar
+    });
+    (Depo.veri.sogutucu || []).forEach(function (s) {
+      var h = M.hesapSogutucu(s);
+      if (h.hata) return;
+      var b = g(s.birimId);
+      b.kayit++; b.k1 += h.tco2e;
+    });
+    (Depo.veri.elektrik || []).forEach(function (s) {
+      var h = M.hesapElektrik(s);
+      if (h.hata) return;
+      var b = g(s.birimId);
+      b.kayit++; b.k2ld += h.ld; b.k2pd += h.pd;
+    });
+    return d;
+  };
+
   M.toplamlar = function () {
     var v = Depo.veri;
     var T = {

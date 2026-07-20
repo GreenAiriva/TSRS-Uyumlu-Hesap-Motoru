@@ -252,6 +252,7 @@ window.UI = (function () {
      opts: { sutunlar:[{etiket, deger(satir), sinif}], satirlar,
              bosMesaj, islemler:[{etiket, sinif, tik(satir,i)}] } */
   UI.veriTablo = function (opts) {
+    opts.sutunlar = opts.sutunlar.filter(Boolean);   // koşullu kolonlar null gelebilir
     if (!opts.satirlar.length) {
       return el("div", { class: "bos-durum" }, [
         el("div", { class: "buyuk" }, ["▦"]),
@@ -1096,12 +1097,137 @@ window.UI = (function () {
   var BOLGESIZ = { "Sabit Yanma": 1, "Proses Emisyonları": 1, "Satın Alınan Isı/Buhar": 1, "Diğer Kapsam 3": 1 };
   var MANUEL_EF_ZORUNLU = { "Proses Emisyonları": 1, "Satın Alınan Isı/Buhar": 1, "Diğer Kapsam 3": 1 };
 
+  /* ============================================================
+     INDEX BİRİM BAĞLARI — faaliyet / soğutucu / elektrik kayıtları INDEX
+     organizasyon ağacındaki bir birime bağlanabilir (kayit.birimId).
+     Sayfa üstündeki seçici oturumluktur (veriye yazılmaz): seçili birim
+     tabloyu (alt birimler dahil) süzer ve yeni kayda otomatik damgalanır.
+     Envanter raporundaki birim bazlı Kapsam 1-2 dağılımı bu bağla hesaplanır.
+     ============================================================ */
+  var aktifBirimId = "";          // "" = tüm birimler, "__yok__" = birime atanmamışlar
+  function indeksBirimleri() { return ((Depo.veri.indeks || {}).org) || []; }
+  function birimAdi(id) {
+    var ad = null;
+    indeksBirimleri().forEach(function (k) { if (k.id === id) ad = k.ad; });
+    return ad;
+  }
+  /* Org ağacını girintili <option> listesi olarak doldurur */
+  function birimSecenekleriDoldur(sec) {
+    var L = indeksBirimleri();
+    function cocuklar(id) { return L.filter(function (k) { return (k.ustId || "") === (id || ""); }); }
+    var eklendi = {};
+    function dal(k, seviye) {
+      if (eklendi[k.id]) return;
+      eklendi[k.id] = true;
+      sec.appendChild(el("option", { value: k.id },
+        [Array(seviye + 1).join(" ") + k.ad + "  (" + k.id + ")"]));
+      cocuklar(k.id).forEach(function (c) { dal(c, seviye + 1); });
+    }
+    cocuklar("").forEach(function (k) { dal(k, 0); });
+    L.forEach(function (k) { dal(k, 0); });   // üst bağı kopuk birimler de listelensin
+  }
+  /* Bir birim + tüm alt soyu (üst birim seçilince alt birimlerin kayıtları da görünür) */
+  function birimVeAltlari(id) {
+    var L = indeksBirimleri(), kume = {};
+    (function ekle(x) {
+      kume[x] = true;
+      L.forEach(function (k) { if ((k.ustId || "") === x && !kume[k.id]) ekle(k.id); });
+    })(id);
+    return kume;
+  }
+  function birimSuz(kayitlar) {
+    if (!aktifBirimId) return kayitlar;
+    if (aktifBirimId === "__yok__") return kayitlar.filter(function (s) { return !s.birimId; });
+    var kume = birimVeAltlari(aktifBirimId);
+    return kayitlar.filter(function (s) { return kume[s.birimId]; });
+  }
+  /* Sayfa üstü birim seçici şeridi */
+  function birimSeciciCiz(kok, kayitlar) {
+    if (!indeksBirimleri().length) {
+      kok.appendChild(el("div", { class: "bilgi" }, [
+        "Birim bazlı giriş için önce ", el("a", { href: "#/indeks" }, ["INDEX → Organizasyon Hiyerarşisi"]),
+        " sayfasında organizasyon ağacını kurun; kayıtlar o zamana dek birimsiz tutulur."]));
+      return;
+    }
+    var sec = el("select", { "aria-label": "Organizasyon birimine göre süz" });
+    sec.appendChild(el("option", { value: "" }, ["— Tüm birimler —"]));
+    sec.appendChild(el("option", { value: "__yok__" }, ["— Birime atanmamış kayıtlar —"]));
+    birimSecenekleriDoldur(sec);
+    sec.value = aktifBirimId;
+    if (sec.value !== aktifBirimId) { aktifBirimId = ""; sec.value = ""; }  // birim silinmişse tümüne dön
+    sec.addEventListener("change", function () { aktifBirimId = sec.value; UI.ciz(); });
+    var atanmis = kayitlar.filter(function (s) { return s.birimId; }).length;
+    var secili = (aktifBirimId && aktifBirimId !== "__yok__") ? birimAdi(aktifBirimId) : null;
+    kok.appendChild(el("div", { class: "admin-arac" }, [
+      el("label", { style: "font-size:12.5px;font-weight:600;display:flex;align-items:center;gap:8px;flex-wrap:wrap" },
+        ["Organizasyon Birimi:", sec]),
+      secili ? el("span", { class: "rozet k2" }, ["Yeni kayıtlar → " + UI.kisalt(secili, 34)]) : null,
+      el("span", { class: "veri-sayac" }, [atanmis + " / " + kayitlar.length + " kayıt birime atanmış"])
+    ]));
+  }
+  /* Form için birim seçim alanı — deger null ise sayfadaki aktif birim önerilir */
+  function birimAlaniOlustur(deger) {
+    var sec = el("select", { "data-anahtar": "birimId" });
+    sec.appendChild(el("option", { value: "" }, ["— Birimsiz (genel) —"]));
+    birimSecenekleriDoldur(sec);
+    var v = deger != null ? deger : ((aktifBirimId && aktifBirimId !== "__yok__") ? aktifBirimId : "");
+    if (v) {
+      sec.value = v;
+      if (sec.value !== v) {   // kayıtlı birim ağaçta artık yok: bağ korunur, açıkça gösterilir
+        sec.appendChild(el("option", { value: v }, [v + " (ağaçta yok)"]));
+        sec.value = v;
+      }
+    }
+    var alan = el("div", { class: "alan" }, [
+      el("label", null, ["Organizasyon Birimi",
+        el("span", { class: "yardim" }, [" INDEX ağacından"])]),
+      sec]);
+    alan.girdi = sec;
+    return alan;
+  }
+  /* Kayıt No alanı: boş bırakılırsa kaydederken sayaçtan otomatik atanır */
+  function noAlaniOlustur(deger, onek) {
+    return UI.alan({ anahtar: "no", etiket: "Kayıt No", tip: "metin", deger: deger || "",
+      yardim: "boş kalırsa otomatik: " + onek + "-" + String(Depo.veri.sayac).padStart(3, "0") });
+  }
+  /* Elle girilen no'nun çakışma denetimi (kaydetmeden önce; sayaç tüketilmez) */
+  function noCakisiyor(ad, istenen, eskiNo) {
+    istenen = String(istenen || "").trim();
+    if (!istenen) return false;
+    var ix = tazeIndeks(ad, istenen);
+    return ix > -1 && istenen !== eskiNo;
+  }
+  /* Formdan gelen no'yu sonuçlandırır: elle girilmişse onu, boşsa otomatik üretir */
+  function noBelirle(ad, onek, istenen) {
+    istenen = String(istenen || "").trim();
+    return istenen || Depo.yeniNo(onek, ad);
+  }
+  /* no değişmiş olabilir: kayıt ESKİ no ile bulunup yenisiyle değiştirilir */
+  function tazeGuncelleNoIle(ad, eskiNo, v) {
+    var ix = tazeIndeks(ad, eskiNo);
+    if (ix > -1) tazeDizi(ad)[ix] = v;
+    else {
+      tazeDizi(ad).push(v);
+      UI.bildir("Kayıt siz düzenlerken uzaktan yenilenmişti; değişikliğiniz listeye yeniden eklendi.", true);
+    }
+  }
+  /* Tablolar için ortak Birim kolonu */
+  function birimKolonu() {
+    return { etiket: "Birim", deger: function (s) {
+      if (!s.birimId) return el("span", { style: "color:var(--soluk)" }, ["—"]);
+      var ad = birimAdi(s.birimId);
+      return el("span", { title: s.birimId }, [UI.kisalt(ad || (s.birimId + " (ağaçta yok)"), 24)]);
+    } };
+  }
+
   function faaliyetFormu(kayit, bittiginde) {
     var s = Object.assign({ bolge: "Other1", veriKalite: "", manuelEF: "" }, kayit || {});
     var govde = el("div");
     var izgara = el("div", { class: "form-izgara" });
     var onizleme = el("div", { class: "bilgi", style: "margin:16px 0 0" });
 
+    var aNo = noAlaniOlustur(s.no, "F");
+    var aBirimSec = birimAlaniOlustur(kayit ? (s.birimId || "") : null);
     var aTesis = UI.alan({ anahtar: "tesis", etiket: "Tesis / Faaliyet Adı", tip: "metin", zorunlu: true, deger: s.tesis,
       yardim: "örn. Açık Ocak Jeneratörü, Konkasör Tesisi" });
     var aKategori = UI.alan({ anahtar: "kategori", etiket: "Emisyon Kategorisi", tip: "secim", liste: "faaliyet_kategorisi", zorunlu: true, deger: s.kategori });
@@ -1177,7 +1303,7 @@ window.UI = (function () {
       a.girdi.addEventListener("input", onizle);
     });
 
-    [aTesis, aKategori, aBolge, aKaynak, aMiktar, aBirim, aManuel, aKalite, aDonem, aNot]
+    [aNo, aBirimSec, aTesis, aKategori, aBolge, aKaynak, aMiktar, aBirim, aManuel, aKalite, aDonem, aNot]
       .forEach(function (a) { izgara.appendChild(a); });
     govde.appendChild(izgara); govde.appendChild(onizleme);
     kaynakDoldur(); birimDoldur(); onizle();
@@ -1193,6 +1319,8 @@ window.UI = (function () {
         zorunlu(aTesis, !String(v.tesis || "").trim(), "Tesis / faaliyet adı zorunludur");
         zorunlu(aKategori, !v.kategori, "Kategori seçin");
         zorunlu(aMiktar, !v.miktar || !(Motor.sayi(v.miktar) > 0), "Sıfırdan büyük bir miktar girin");
+        zorunlu(aNo, noCakisiyor("faaliyet", v.no, kayit ? kayit.no : null),
+          "Bu numara başka bir faaliyet kaydında kullanılıyor");
         var manuelYok = !(Motor.sayi(v.manuelEF) > 0);
         if (v.kategori && !MANUEL_EF_ZORUNLU[v.kategori] && manuelYok) {
           zorunlu(aKaynak, !v.kaynak, "Yakıt / araç tipi seçin (ya da Manuel EF girin)");
@@ -1206,13 +1334,17 @@ window.UI = (function () {
           if (ilkHata) ilkHata.focus();
           return;
         }
-        // Hesap üretmeyen kayıt sessizce kaydedilmesin: kullanıcıya açıkça sorulur
+        // No formda sonuçlanır: elle girilmişse o, boşsa sayaçtan otomatik
         var h = Motor.hesapFaaliyet(v);
         if (h.hata) {
           UI.onayla("Bu kayıt şu nedenle HESAPLANAMIYOR: “" + h.hata + "”. Toplamlara girmeyecek. " +
-            "Taslak olarak yine de kaydedilsin mi?", function () { bittiginde(v); kapat(); });
+            "Taslak olarak yine de kaydedilsin mi?", function () {
+              v.no = noBelirle("faaliyet", "F", v.no);
+              bittiginde(v); kapat();
+            });
           return;
         }
+        v.no = noBelirle("faaliyet", "F", v.no);
         bittiginde(v); kapat();
       } }
     ]);
@@ -1431,7 +1563,6 @@ window.UI = (function () {
 
     UI.ustAksiyon(el("button", { class: "btn birincil", type: "button", onclick: function () {
       faaliyetFormu(null, function (v) {
-        v.no = Depo.yeniNo("F");
         tazeDizi("faaliyet").push(v); Depo.kaydet(); yenile();
       });
     } }, ["+ Yeni Kayıt"]));
@@ -1449,12 +1580,15 @@ window.UI = (function () {
         el("span", { style: "font-size:12px;color:var(--soluk)" }, [UI.kisalt(fHatalar.join(" • "), 220)])
       ]));
     }
+    birimSeciciCiz(kok, liste);
+    var gosterilen = birimSuz(liste);
     kok.appendChild(UI.kart("Faaliyet Kayıtları", [
       UI.veriTablo({
-        satirlar: liste,
-        bosMesaj: "Henüz faaliyet kaydı yok. Sağ üstteki \u201C+ Yeni Kayıt\u201D düğmesiyle başlayın.",
+        satirlar: gosterilen,
+        bosMesaj: liste.length ? "Seçili birimde (ve alt birimlerinde) kayıt yok." : "Henüz faaliyet kaydı yok. Sağ üstteki \u201C+ Yeni Kayıt\u201D düğmesiyle başlayın.",
         sutunlar: [
           { etiket: "No", deger: function (s) { return s.no; } },
+          indeksBirimleri().length ? birimKolonu() : null,
           { etiket: "Tesis / Faaliyet", deger: function (s) { return UI.kisalt(s.tesis, 34); } },
           { etiket: "Kategori", deger: function (s) { return s.kategori; } },
           { etiket: "Kaynak", deger: function (s) { return UI.kisalt(MANUEL_EF_ZORUNLU[s.kategori] ? "Manuel EF" : s.kaynak, 40); } },
@@ -1482,10 +1616,10 @@ window.UI = (function () {
         ],
         islemler: [
           { etiket: "Düzenle", tik: function (s) {
-            faaliyetFormu(s, function (v) { v.no = s.no; tazeGuncelle("faaliyet", v); Depo.kaydet(); yenile(); });
+            faaliyetFormu(s, function (v) { tazeGuncelleNoIle("faaliyet", s.no, v); Depo.kaydet(); yenile(); });
           } },
           { etiket: "Kopyala", tik: function (s) {
-            var k = Object.assign({}, s, { no: Depo.yeniNo("F") });
+            var k = Object.assign({}, s, { no: Depo.yeniNo("F", "faaliyet") });
             tazeDizi("faaliyet").push(k); Depo.kaydet(); yenile();
           } },
           { etiket: "Sil", sinif: "tehlike", tik: function (s, i) {
@@ -1509,6 +1643,8 @@ window.UI = (function () {
     var onizleme = el("div", { class: "bilgi", style: "margin:16px 0 0" });
 
     var gazlar = Depo.set("kip_ar6").map(function (r) { return r.Gas_Name; }).filter(Boolean);
+    var aNo = noAlaniOlustur(s.no, "S");
+    var aBirimSec = birimAlaniOlustur(kayit ? (s.birimId || "") : null);
     var aAd = UI.alan({ anahtar: "ekipman", etiket: "Ekipman / Sistem Adı", tip: "metin", zorunlu: true, deger: s.ekipman,
       yardim: "örn. İdari Bina Chiller, Servis Aracı Kliması" });
     var aGaz = UI.alan({ anahtar: "gaz", etiket: "Gaz (KIP tablosundan)", tip: "metin", zorunlu: true, deger: s.gaz,
@@ -1546,7 +1682,7 @@ window.UI = (function () {
     [aGaz, aBas, aYeni, aCik, aSon, aTur, aKap, aOran].forEach(function (a) {
       a.girdi.addEventListener("input", onizle); a.girdi.addEventListener("change", onizle);
     });
-    [aAd, aGaz, aYontem, aBas, aYeni, aCik, aSon, aTur, aKap, aOran, aNot].forEach(function (a) { izgara.appendChild(a); });
+    [aNo, aBirimSec, aAd, aGaz, aYontem, aBas, aYeni, aCik, aSon, aTur, aKap, aOran, aNot].forEach(function (a) { izgara.appendChild(a); });
     var govde = el("div", null, [izgara, onizleme]);
     yontemGoster(); onizle();
 
@@ -1561,7 +1697,11 @@ window.UI = (function () {
         if (v.yontem === "Tarama (Basit)" && !(Motor.sayi(v.kapasite) > 0)) {
           UI.alanHata(aKap, "Tarama yönteminde ekipman kapasitesi (kg) zorunludur"); hataVar = true;
         }
+        if (noCakisiyor("sogutucu", v.no, kayit ? kayit.no : null)) {
+          UI.alanHata(aNo, "Bu numara başka bir soğutucu kaydında kullanılıyor"); hataVar = true;
+        }
         if (hataVar) { var ilkH = izgara.querySelector(".alan-hatali input, .alan-hatali select"); if (ilkH) ilkH.focus(); return; }
+        v.no = noBelirle("sogutucu", "S", v.no);
         bittiginde(v); kapat();
       } }
     ]);
@@ -1570,7 +1710,7 @@ window.UI = (function () {
   function cizSogutucu(kok) {
     var liste = Depo.veri.sogutucu;
     UI.ustAksiyon(el("button", { class: "btn birincil", type: "button", onclick: function () {
-      sogutucuFormu(null, function (v) { v.no = Depo.yeniNo("S"); liste.push(v); Depo.kaydet(); UI.ciz(); });
+      sogutucuFormu(null, function (v) { tazeDizi("sogutucu").push(v); Depo.kaydet(); UI.ciz(); });
     } }, ["+ Yeni Kayıt"]));
 
     kok.appendChild(el("div", { class: "bilgi" },
@@ -1584,12 +1724,17 @@ window.UI = (function () {
       ]));
     }
 
+    birimSeciciCiz(kok, liste);
+    var gosterilen = birimSuz(liste);
     kok.appendChild(UI.kart("Soğutucu / Kaçak Gaz Kayıtları", [
       UI.veriTablo({
-        satirlar: liste,
-        bosMesaj: "Henüz kayıt yok. Florlu gaz içeren ekipmanlarınızı ekleyin.",
+        satirlar: gosterilen,
+        bosMesaj: liste.length
+          ? "Seçili birimde (ve alt birimlerinde) kayıt yok."
+          : "Henüz kayıt yok. Florlu gaz içeren ekipmanlarınızı ekleyin.",
         sutunlar: [
           { etiket: "No", deger: function (s) { return s.no; } },
+          indeksBirimleri().length ? birimKolonu() : null,
           { etiket: "Ekipman", deger: function (s) { return UI.kisalt(s.ekipman, 32); } },
           { etiket: "Gaz", deger: function (s) { return s.gaz; } },
           { etiket: "Yöntem", deger: function (s) { return s.yontem; } },
@@ -1606,7 +1751,7 @@ window.UI = (function () {
         ],
         islemler: [
           { etiket: "Düzenle", tik: function (s) {
-            sogutucuFormu(s, function (v) { v.no = s.no; tazeGuncelle("sogutucu", v); Depo.kaydet(); UI.ciz(); });
+            sogutucuFormu(s, function (v) { tazeGuncelleNoIle("sogutucu", s.no, v); Depo.kaydet(); UI.ciz(); });
           } },
           { etiket: "Sil", sinif: "tehlike", tik: function (s, i) {
             UI.onayla("\u201C" + (s.no || "") + " — " + (s.ekipman || "") + "\u201D silinsin mi?", function () {
@@ -1628,6 +1773,8 @@ window.UI = (function () {
     var izgara = el("div", { class: "form-izgara" });
     var onizleme = el("div", { class: "bilgi", style: "margin:16px 0 0" });
 
+    var aNo = noAlaniOlustur(s.no, "E");
+    var aBirimSec = birimAlaniOlustur(kayit ? (s.birimId || "") : null);
     var aAd = UI.alan({ anahtar: "tesis", etiket: "Tesis / Sayaç Adı", tip: "metin", zorunlu: true, deger: s.tesis });
     var aSeb = UI.alan({ anahtar: "sebeke", etiket: "Şebeke (Lokasyona Dayalı EF)", tip: "secim",
       liste: Motor.elektrikSebekeleri(), zorunlu: true, deger: s.sebeke, genis: true });
@@ -1657,7 +1804,7 @@ window.UI = (function () {
     }
     izgara.addEventListener("input", onizle);
     izgara.addEventListener("change", onizle);
-    [aAd, aSeb, aKwh, aSoz, aRec, aTed, aDonem, aNot].forEach(function (a) { izgara.appendChild(a); });
+    [aNo, aBirimSec, aAd, aSeb, aKwh, aSoz, aRec, aTed, aDonem, aNot].forEach(function (a) { izgara.appendChild(a); });
     var govde = el("div", null, [izgara, onizleme]);
     onizle();
 
@@ -1670,7 +1817,11 @@ window.UI = (function () {
         if (!String(v.tesis || "").trim()) { UI.alanHata(aAd, "Tesis / sayaç adı zorunludur"); hataVar = true; }
         if (!v.sebeke) { UI.alanHata(aSeb, "Şebeke seçin"); hataVar = true; }
         if (!v.kwh || !(Motor.sayi(v.kwh) > 0)) { UI.alanHata(aKwh, "Sıfırdan büyük tüketim (kWh) girin"); hataVar = true; }
+        if (noCakisiyor("elektrik", v.no, kayit ? kayit.no : null)) {
+          UI.alanHata(aNo, "Bu numara başka bir elektrik kaydında kullanılıyor"); hataVar = true;
+        }
         if (hataVar) { var ilkH = izgara.querySelector(".alan-hatali input, .alan-hatali select"); if (ilkH) ilkH.focus(); return; }
+        v.no = noBelirle("elektrik", "E", v.no);
         bittiginde(v); kapat();
       } }
     ]);
@@ -1679,7 +1830,7 @@ window.UI = (function () {
   function cizElektrik(kok) {
     var liste = Depo.veri.elektrik;
     UI.ustAksiyon(el("button", { class: "btn birincil", type: "button", onclick: function () {
-      elektrikFormu(null, function (v) { v.no = Depo.yeniNo("E"); liste.push(v); Depo.kaydet(); UI.ciz(); });
+      elektrikFormu(null, function (v) { tazeDizi("elektrik").push(v); Depo.kaydet(); UI.ciz(); });
     } }, ["+ Yeni Kayıt"]));
 
     kok.appendChild(el("div", { class: "bilgi" },
@@ -1693,12 +1844,17 @@ window.UI = (function () {
       ]));
     }
 
+    birimSeciciCiz(kok, liste);
+    var gosterilen = birimSuz(liste);
     kok.appendChild(UI.kart("Elektrik Tüketim Kayıtları", [
       UI.veriTablo({
-        satirlar: liste,
-        bosMesaj: "Henüz kayıt yok. Tesis veya sayaç bazında elektrik tüketimlerini ekleyin.",
+        satirlar: gosterilen,
+        bosMesaj: liste.length
+          ? "Seçili birimde (ve alt birimlerinde) kayıt yok."
+          : "Henüz kayıt yok. Tesis veya sayaç bazında elektrik tüketimlerini ekleyin.",
         sutunlar: [
           { etiket: "No", deger: function (s) { return s.no; } },
+          indeksBirimleri().length ? birimKolonu() : null,
           { etiket: "Tesis / Sayaç", deger: function (s) { return UI.kisalt(s.tesis, 30); } },
           { etiket: "Şebeke", deger: function (s) { return UI.kisalt(s.sebeke, 34); } },
           { etiket: "kWh", sinif: "sayi", deger: function (s) { return Motor.fmt(parseFloat(s.kwh), 0); } },
@@ -1712,7 +1868,7 @@ window.UI = (function () {
         ],
         islemler: [
           { etiket: "Düzenle", tik: function (s) {
-            elektrikFormu(s, function (v) { v.no = s.no; tazeGuncelle("elektrik", v); Depo.kaydet(); UI.ciz(); });
+            elektrikFormu(s, function (v) { tazeGuncelleNoIle("elektrik", s.no, v); Depo.kaydet(); UI.ciz(); });
           } },
           { etiket: "Sil", sinif: "tehlike", tik: function (s, i) {
             UI.onayla("\u201C" + (s.no || "") + " — " + (s.tesis || "") + "\u201D silinsin mi?", function () {

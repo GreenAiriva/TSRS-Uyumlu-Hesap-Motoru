@@ -351,6 +351,58 @@ window.Rapor = (function () {
         trS([el("b", null, ["Kapsam 1 Toplam"]), { sayi: el("b", null, [Motor.fmt(T.k1.toplam, 2)]) }, { sayi: "100%" }])
       ])
     ]));
+
+    /* Birim bazında Kapsam 1-2 dağılımı — kayıtların INDEX organizasyon birimi
+       bağından (birimId) türetilir; ağaç kurulmamışsa bölüm hiç görünmez. */
+    var idxBirimler = ((Depo.veri.indeks || {}).org) || [];
+    if (idxBirimler.length) {
+      var BD = Motor.birimDagilimi();
+      var bSatirlar = [];
+      var birimDal = function (ust, seviye) {
+        idxBirimler.filter(function (k) { return (k.ustId || "") === ust; }).forEach(function (k) {
+          bSatirlar.push({ k: k, seviye: seviye });
+          birimDal(k.id, seviye + 1);
+        });
+      };
+      birimDal("", 0);
+      var bTop = { k1: 0, ld: 0, pd: 0 }, bGovde = [];
+      bSatirlar.forEach(function (r) {
+        var d = BD[r.k.id];
+        if (!d || !d.kayit) return;             // kaydı olmayan birim satır üretmez
+        bTop.k1 += d.k1; bTop.ld += d.k2ld; bTop.pd += d.k2pd;
+        bGovde.push(trS([
+          Array(r.seviye + 1).join(" ") + r.k.ad,
+          { sayi: Motor.fmt(d.k1, 2) }, { sayi: Motor.fmt(d.k2ld, 2) },
+          { sayi: Motor.fmt(d.k2pd, 2) }, { sayi: Motor.fmt(d.k1 + d.k2ld, 2) }
+        ]));
+      });
+      var bAtanmamis = BD[""];
+      if (bAtanmamis && bAtanmamis.kayit) {
+        bTop.k1 += bAtanmamis.k1; bTop.ld += bAtanmamis.k2ld; bTop.pd += bAtanmamis.k2pd;
+        bGovde.push(trS([el("span", { class: "bos" }, ["Birime atanmamış kayıtlar"]),
+          { sayi: Motor.fmt(bAtanmamis.k1, 2) }, { sayi: Motor.fmt(bAtanmamis.k2ld, 2) },
+          { sayi: Motor.fmt(bAtanmamis.k2pd, 2) }, { sayi: Motor.fmt(bAtanmamis.k1 + bAtanmamis.k2ld, 2) }]));
+      }
+      if (bGovde.length) {
+        bGovde.push(trS([el("b", null, ["TOPLAM (Kapsam 1 + 2)"]),
+          { sayi: el("b", null, [Motor.fmt(bTop.k1, 2)]) },
+          { sayi: el("b", null, [Motor.fmt(bTop.ld, 2)]) },
+          { sayi: el("b", null, [Motor.fmt(bTop.pd, 2)]) },
+          { sayi: el("b", null, [Motor.fmt(bTop.k1 + bTop.ld, 2)]) }]));
+        sMet.appendChild(el("h3", { style: "margin:10px 0 2px;font-size:13px" },
+          ["Birim Bazında Kapsam 1-2 Dağılımı (tCO2e)"]));
+        sMet.appendChild(el("table", null, [
+          th(["Organizasyon Birimi", { t: "Kapsam 1", sinif: "sayi" },
+              { t: "Kapsam 2 (Lokasyon)", sinif: "sayi" }, { t: "Kapsam 2 (Piyasa)", sinif: "sayi" },
+              { t: "Kapsam 1+2 (LD)", sinif: "sayi" }]),
+          el("tbody", null, bGovde)
+        ]));
+        sMet.appendChild(el("p", { style: "font-size:11px;color:var(--soluk);margin:4px 0 0" }, [
+          "Dağılım, kayıtların INDEX organizasyon birimi bağına göredir; her satır yalnız o birime " +
+          "bağlanan kayıtları içerir (alt birimler ayrı satırdır). Kapsam 3 bu tabloya dahil edilmez."]));
+      }
+    }
+
     sMet.appendChild(el("h3", { style: "margin:10px 0 2px;font-size:13px" }, ["Kapsam 3 Kırılımı (tCO2e)"]));
     sMet.appendChild(el("table", null, [
       th(["Kategori (GHG Protokolü)", { t: "tCO2e", sinif: "sayi" }, { t: "Pay", sinif: "sayi" }]),
