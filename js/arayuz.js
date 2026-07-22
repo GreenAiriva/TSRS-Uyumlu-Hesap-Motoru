@@ -73,30 +73,40 @@ window.UI = (function () {
     if (b && b.parentNode) b.parentNode.removeChild(b);
   };
 
-  /* Eşzamanlılık çakışması: kurtarma seçenekli kalıcı uyarı (depo.js çağırır) */
-  UI.kayitCakismasi = function () {
+  /* Eşzamanlılık çakışması: yalnız GERÇEKTEN aynı alanda çakışan değişiklikler
+     için sorulur (depo.js önce üç yollu birleştirmeyi dener). İki seçenek de
+     birleşik sonucu yazar; çakışmayan hiçbir veri hiçbir seçenekte kaybolmaz. */
+  UI.kayitCakismasi = function (cakismalar) {
     UI.kayitDurumu("hata");
-    UI.banner("kayit-cakisma",
-      "Bu müşteri başka bir kullanıcı tarafından değiştirildi; son değişiklikleriniz buluta YAZILAMADI.",
-      [
-        { etiket: "⟳ Uzak sürümü getir", tik: function () {
-            UI.onayla("Buluttaki güncel veri yüklenecek; sizin kaydedilmemiş değişiklikleriniz KAYBOLACAK. Devam edilsin mi?", function () {
-              Depo.cakismaCoz("uzak").then(function (h) {
-                if (h) { UI.bildir(h, true); return; }
-                UI.bannerKapat("kayit-cakisma"); UI.bildir("Güncel veri yüklendi"); UI.ciz();
-                if (window.App && App.kenarAltligiEkle) App.kenarAltligiEkle();
-              });
-            });
-          } },
-        { etiket: "⬆ Benim verimi esas al", tik: function () {
-            UI.onayla("Diğer kullanıcının buluta yazdığı değişiklikler, SİZİN verinizle değiştirilecek. Devam edilsin mi?", function () {
-              Depo.cakismaCoz("uzerine").then(function (h) {
-                if (h) { UI.bildir(h, true); return; }
-                UI.bannerKapat("kayit-cakisma"); UI.bildir("Veriniz buluta yazıldı");
-              });
-            });
-          } }
-      ]);
+    var mesaj;
+    if (cakismalar && cakismalar.length) {
+      var adlar = cakismalar.slice(0, 4).map(function (c) { return c.etiket || ""; }).join("  |  ");
+      if (cakismalar.length > 4) adlar += "  (+" + (cakismalar.length - 4) + " daha)";
+      mesaj = "Başka bir kullanıcıyla AYNI alanda farklı değişiklik yapıldı: " + adlar +
+              " — Seçiminiz yalnız bu alanlara uygulanır; diğer tüm değişiklikler (sizin ve onun) korunur.";
+    } else {
+      mesaj = "Eşzamanlı kayıt yoğunluğu algılandı. Aşağıdaki seçeneklerden biriyle devam edin; çakışmayan değişiklikler korunur.";
+    }
+    UI.banner("kayit-cakisma", mesaj, [
+      { etiket: "Benim değerlerim kalsın", tik: function () {
+          Depo.cakismaCoz("yerel").then(function (h) {
+            if (h) { UI.bildir(h, true); return; }
+            UI.bannerKapat("kayit-cakisma");
+            UI.bildir("Birleştirildi — çakışan alanlarda sizin değerleriniz");
+            UI.ciz();
+            if (window.App && App.kenarAltligiEkle) App.kenarAltligiEkle();
+          });
+        } },
+      { etiket: "Diğer kullanıcınınki kalsın", tik: function () {
+          Depo.cakismaCoz("uzak").then(function (h) {
+            if (h) { UI.bildir(h, true); return; }
+            UI.bannerKapat("kayit-cakisma");
+            UI.bildir("Birleştirildi — çakışan alanlarda diğer kullanıcının değerleri");
+            UI.ciz();
+            if (window.App && App.kenarAltligiEkle) App.kenarAltligiEkle();
+          });
+        } }
+    ]);
   };
 
   /* Üst bardaki gerçek kayıt durumu rozeti (iyimser "Kaydedildi" yerine) */

@@ -53,6 +53,189 @@ window.Depo = (function () {
 
   function derinKopya(x) { return JSON.parse(JSON.stringify(x)); }
 
+  /* ============================================================
+     ÜÇ YOLLU BİRLEŞTİRME — eşzamanlı düzenleme desteği
+     taban = iki kullanıcının ortak çıkış noktası (_sonKayit)
+     yerel = bu ekrandaki veri, uzak = buluttaki güncel veri.
+     Kayıtlar dizin numarasıyla değil KİMLİĞİYLE (no/id/kod) eşleştirilir;
+     yalnız aynı kaydın aynı alanı iki yanda FARKLI değiştirildiyse çakışma
+     üretilir, diğer tüm değişiklikler otomatik birleşir. Çakışma kayıtlarında
+     yerel duruş sonuca yazılır; "uzak" tercihi yolaYaz ile sonradan uygulanır. */
+  /* ===UCB-BASLA=== */
+  function esitJSON(a, b) {
+    if (a === b) return true;
+    try { return JSON.stringify(a) === JSON.stringify(b); } catch (e) { return false; }
+  }
+  function duzNesneMi(x) { return x != null && typeof x === "object" && !Array.isArray(x); }
+  var KIMLIK_ALANLARI = ["no", "id", "kod", "docNo", "belgeNo", "kimlik"];
+  function kimlikAnahtari(x) {
+    if (!duzNesneMi(x)) return null;
+    for (var i = 0; i < KIMLIK_ALANLARI.length; i++) {
+      var v = x[KIMLIK_ALANLARI[i]];
+      if (v !== undefined && v !== null && String(v) !== "") return KIMLIK_ALANLARI[i] + ":" + String(v);
+    }
+    return null;
+  }
+  function yolEtiketi(yol) {
+    var UST = { profil: "Şirket profili", faaliyet: "Faaliyet", sogutucu: "Soğutucu/kaçak",
+                elektrik: "Elektrik", moduller: "TSRS modülleri", sektorMetrik: "Sektör metrikleri", indeks: "INDEX" };
+    return (yol || []).map(function (p, i) {
+      p = String(p);
+      if (p.charAt(0) === "#") { var k = p.slice(1); return k.indexOf(":") >= 0 ? k.split(":").slice(1).join(":") : k; }
+      return i === 0 ? (UST[p] || p) : p;
+    }).join(" › ");
+  }
+  function cakismaEkle(cak, yol, yerel, uzak, tur) {
+    cak.push({ yol: yol.slice(), tur: tur || "deger", etiket: yolEtiketi(yol),
+               yerel: yerel === undefined ? undefined : derinKopya(yerel),
+               uzak:  uzak  === undefined ? undefined : derinKopya(uzak) });
+  }
+  /* İlkel (string/sayı) dizileri: küme mantığı — iki yanın eklemeleri birleşir,
+     bir yanın sildiği (diğeri dokunmadıysa) düşer. */
+  function kumeBirlestir(taban, yerel, uzak) {
+    function anah(v) { return typeof v + ":" + JSON.stringify(v); }
+    function harita(dz) { var h = {}; (dz || []).forEach(function (v) { h[anah(v)] = true; }); return h; }
+    var hT = harita(taban), hY = harita(yerel), hU = harita(uzak);
+    var sonuc = [], eklendi = {};
+    function ekle(v) { var k = anah(v); if (!eklendi[k]) { eklendi[k] = true; sonuc.push(derinKopya(v)); } }
+    (taban || []).forEach(function (v) { var k = anah(v); if (hY[k] && hU[k]) ekle(v); });
+    (yerel || []).forEach(function (v) { if (!harita(taban)[anah(v)]) ekle(v); });
+    (uzak  || []).forEach(function (v) { if (!hT[anah(v)]) ekle(v); });
+    return sonuc;
+  }
+  function diziBirlestir(taban, yerel, uzak, yol, cak) {
+    var hepsi = [].concat(taban || [], yerel || [], uzak || []);
+    var tumPrimitif = hepsi.every(function (x) { return x === null || typeof x !== "object"; });
+    if (tumPrimitif) return kumeBirlestir(taban, yerel, uzak);
+    var kimlikli = hepsi.every(function (x) { return kimlikAnahtari(x) !== null; });
+    var tekrar = false;
+    if (kimlikli) [taban, yerel, uzak].forEach(function (dz) {
+      var g = {};
+      (dz || []).forEach(function (x) { var k = kimlikAnahtari(x); if (g[k]) tekrar = true; g[k] = true; });
+    });
+    if (!kimlikli || tekrar) {           /* güvenli geri çekilme: diziyi bütün olarak sor */
+      cakismaEkle(cak, yol, yerel, uzak, "dizi");
+      return derinKopya(yerel);
+    }
+    function harita(dz) { var h = {}; (dz || []).forEach(function (x) { h[kimlikAnahtari(x)] = x; }); return h; }
+    var hT = harita(taban), hU = harita(uzak);
+    var sonuc = [], gorulen = {};
+    (yerel || []).forEach(function (oge) {
+      var k = kimlikAnahtari(oge); gorulen[k] = true;
+      var t = hT[k], u = hU[k];
+      if (u === undefined) {
+        if (t === undefined) { sonuc.push(derinKopya(oge)); return; }           /* yerel ekledi */
+        if (esitJSON(t, oge)) return;                                            /* uzak sildi, yerel dokunmadı */
+        cakismaEkle(cak, yol.concat(["#" + k]), oge, undefined, "degistir-vs-sil");
+        sonuc.push(derinKopya(oge));
+        return;
+      }
+      sonuc.push(ucYollu(t, oge, u, yol.concat(["#" + k]), cak));
+    });
+    (uzak || []).forEach(function (oge) {
+      var k = kimlikAnahtari(oge);
+      if (gorulen[k]) return;
+      var t = hT[k];
+      if (t === undefined) { sonuc.push(derinKopya(oge)); return; }              /* uzak ekledi */
+      if (esitJSON(t, oge)) return;                                              /* yerel sildi, uzak dokunmadı */
+      cakismaEkle(cak, yol.concat(["#" + k]), undefined, oge, "sil-vs-degistir"); /* yerel duruş: silinmiş */
+    });
+    return sonuc;
+  }
+  function nesneBirlestir(taban, yerel, uzak, yol, cak) {
+    taban = taban || {}; yerel = yerel || {}; uzak = uzak || {};
+    var sonuc = {}, gorulen = {};
+    Object.keys(yerel).concat(Object.keys(uzak), Object.keys(taban)).forEach(function (k) {
+      if (gorulen[k]) return; gorulen[k] = true;
+      var tVar = Object.prototype.hasOwnProperty.call(taban, k);
+      var yVar = Object.prototype.hasOwnProperty.call(yerel, k);
+      var uVar = Object.prototype.hasOwnProperty.call(uzak, k);
+      var t = taban[k], y = yerel[k], u = uzak[k];
+      if (!yVar && !uVar) return;
+      if (!yVar) {                                                               /* yerel yok/silmiş */
+        if (!tVar) { sonuc[k] = derinKopya(u); return; }                         /* uzak ekledi */
+        if (esitJSON(t, u)) return;                                              /* uzak dokunmadı → silme geçerli */
+        cakismaEkle(cak, yol.concat([k]), undefined, u, "sil-vs-degistir");
+        return;
+      }
+      if (!uVar) {                                                               /* uzak yok/silmiş */
+        if (!tVar) { sonuc[k] = derinKopya(y); return; }                         /* yerel ekledi */
+        if (esitJSON(t, y)) return;                                              /* yerel dokunmadı → uzak silmesi geçerli */
+        cakismaEkle(cak, yol.concat([k]), y, undefined, "degistir-vs-sil");
+        sonuc[k] = derinKopya(y);
+        return;
+      }
+      sonuc[k] = ucYollu(t, y, u, yol.concat([k]), cak);
+    });
+    return sonuc;
+  }
+  function ucYollu(taban, yerel, uzak, yol, cak) {
+    if (esitJSON(yerel, uzak)) return derinKopya(yerel);
+    if (esitJSON(taban, yerel)) return derinKopya(uzak);    /* yalnız uzak değişmiş */
+    if (esitJSON(taban, uzak)) return derinKopya(yerel);    /* yalnız yerel değişmiş */
+    /* Sayaç kuralları: numara üretiminde geri sarma olmasın — büyük olan kazanır */
+    if (yol.length === 1 && yol[0] === "sayac" && typeof yerel === "number" && typeof uzak === "number")
+      return Math.max(yerel, uzak);
+    if (yol.length === 2 && yol[0] === "indeks" && yol[1] === "sayac" && duzNesneMi(yerel) && duzNesneMi(uzak)) {
+      var s = {}, g = {};
+      Object.keys(yerel).concat(Object.keys(uzak)).forEach(function (k) {
+        if (g[k]) return; g[k] = true;
+        var a = yerel[k], b = uzak[k];
+        s[k] = (typeof a === "number" && typeof b === "number") ? Math.max(a, b) : (a !== undefined ? a : b);
+      });
+      return s;
+    }
+    if (Array.isArray(yerel) && Array.isArray(uzak))
+      return diziBirlestir(Array.isArray(taban) ? taban : [], yerel, uzak, yol, cak);
+    if (duzNesneMi(yerel) && duzNesneMi(uzak))
+      return nesneBirlestir(duzNesneMi(taban) ? taban : {}, yerel, uzak, yol, cak);
+    cakismaEkle(cak, yol, yerel, uzak, "deger");
+    return derinKopya(yerel);
+  }
+  function ucYolluKok(taban, yerel, uzak) {
+    var cak = [];
+    var sonuc = nesneBirlestir(duzNesneMi(taban) ? taban : {}, duzNesneMi(yerel) ? yerel : {},
+                               duzNesneMi(uzak) ? uzak : {}, [], cak);
+    return { sonuc: sonuc, cakismalar: cak };
+  }
+  /* Kimlik-tabanlı yola değer yazma (çakışma tercihi uygularken).
+     deger === undefined → sil. "#no:X" bölütleri dizi elemanını kimliğiyle bulur. */
+  function yolaYaz(kok, yol, deger) {
+    var n = kok;
+    for (var i = 0; i < yol.length; i++) {
+      var seg = String(yol[i]), son = (i === yol.length - 1);
+      if (seg.charAt(0) === "#") {
+        if (!Array.isArray(n)) return false;
+        var kim = seg.slice(1), idx = -1;
+        for (var j = 0; j < n.length; j++) if (kimlikAnahtari(n[j]) === kim) { idx = j; break; }
+        if (son) {
+          if (deger === undefined) { if (idx >= 0) n.splice(idx, 1); }
+          else if (idx >= 0) n[idx] = derinKopya(deger);
+          else n.push(derinKopya(deger));
+          return true;
+        }
+        if (idx < 0) return false;
+        n = n[idx];
+      } else {
+        if (son) {
+          if (deger === undefined) delete n[seg]; else n[seg] = derinKopya(deger);
+          return true;
+        }
+        if (n[seg] == null || typeof n[seg] !== "object") return false;
+        n = n[seg];
+      }
+    }
+    return false;
+  }
+  /* ===UCB-BITIR=== */
+  d._ucYolluKok = ucYolluKok;   /* test/hata ayıklama kancası */
+  d._yolaYaz = yolaYaz;
+  /* Kaydedilmemiş yerel değişiklik var mı? (sessiz tazeleme güvenliği) */
+  d.temizMi = function () {
+    if (d._kayitBekliyor || d._kayitUcuyor || d._bekleyenCakisma) return false;
+    try { return JSON.stringify(d.veri) === JSON.stringify(d._sonKayit); } catch (e) { return false; }
+  };
+
   // Global referans/ayar düzenlemeleri (app_config — tek satır). Bir kez yüklenir.
   d.konfigYukle = function () {
     if (!window.SB) return Promise.resolve();
@@ -134,16 +317,16 @@ window.Depo = (function () {
         if (upd.error) throw upd.error;
         if (!upd.data || !upd.data.length) {
           d._kayitUcuyor = false;
-          // Çakışma: kalıcı banner ile kurtarma seçenekleri sun (toast yeterli değil)
-          if (window.UI && UI.kayitCakismasi) UI.kayitCakismasi();
-          else if (window.UI) UI.bildir("Bu müşteriyi başka bir kullanıcı değiştirdi. Sayfayı yenileyip tekrar deneyin.", true);
-          return;
+          // Sürüm yarışı: pop-up yerine ÜÇ YOLLU BİRLEŞTİRME + otomatik yeniden kayıt.
+          // Yalnız aynı alanda gerçek çakışma varsa kullanıcıya sorulur (banner).
+          return d._otoBirlestir(musteriId, sessiz);
         }
         if (d.aktifMusteriId === musteriId) {   // müşteri bu arada değiştiyse bayat duruma yazma
           d.surumNo = yeniSurum;
           d._sonKayit = gonder;
         }
         d._kayitUcuyor = false;
+        d._birlesimDeneme = 0;   // başarılı kayıt: birleştirme deneme sayacı sıfırlanır
         if (window.UI && UI.bannerKapat) { UI.bannerKapat("kayit-hata"); UI.bannerKapat("kayit-cakisma"); }
         if (window.UI && UI.kayitDurumu) UI.kayitDurumu("kaydedildi");
         if (!sessiz && window.UI) UI.bildir("Kaydedildi");
@@ -169,17 +352,72 @@ window.Depo = (function () {
       });
   };
 
-  /* Çakışma çözümü: "uzak" = buluttaki güncel hâli getir (yereldeki kaydedilmemiş
-     değişiklikler gider), "uzerine" = yerel veriyi güncel sürümün üstüne yaz. */
+  /* ---- Otomatik birleştirme (sürüm yarışında) ----
+     Uzaktaki güncel hali çeker, üç yollu birleştirir; gerçek çakışma yoksa
+     kendiliğinden yeniden kaydeder (en çok 3 deneme). Gerçek çakışma varsa
+     bağlamı saklar ve ayrıntılı banner gösterir. */
+  d._birlesimDeneme = 0;
+  d._bekleyenCakisma = null;
+  d._otoBirlestir = function (musteriId, sessiz) {
+    if (d.aktifMusteriId !== musteriId || !window.SB) return Promise.resolve();
+    d._birlesimDeneme = (d._birlesimDeneme || 0) + 1;
+    if (d._birlesimDeneme > 3) {                 // ağır eşzamanlı yarış (çok nadir): kullanıcıya bırak
+      d._birlesimDeneme = 0;
+      if (window.UI && UI.kayitCakismasi) UI.kayitCakismasi([]);
+      else if (window.UI) UI.bildir("Eşzamanlı kayıt yoğunluğu; lütfen tekrar deneyin.", true);
+      return Promise.resolve();
+    }
+    return SB.from("customers").select("data, surum_no").eq("id", musteriId).single()
+      .then(function (q) {
+        if (q.error) throw q.error;
+        if (d.aktifMusteriId !== musteriId) return;          // bu arada müşteri değişti
+        var uzak = Object.assign(bosVeri(), q.data.data || {});
+        var uzakSurum = q.data.surum_no || 0;
+        var taban = d._sonKayit ? derinKopya(d._sonKayit) : bosVeri();
+        var m = ucYolluKok(taban, derinKopya(d.veri), uzak);
+        if (m.cakismalar.length) {
+          // Aynı alanda gerçek çakışma: bağlamı sakla, seçimli banner göster.
+          d._bekleyenCakisma = { sonuc: m.sonuc, cakismalar: m.cakismalar, uzak: uzak, uzakSurum: uzakSurum };
+          d._birlesimDeneme = 0;
+          if (window.UI && UI.kayitCakismasi) UI.kayitCakismasi(m.cakismalar);
+          else if (window.UI) UI.bildir("Aynı alanda çakışan değişiklikler var; lütfen seçim yapın.", true);
+          return;
+        }
+        // Temiz birleşme: taban artık uzak hal → sürüm geçmişi yalnız bizim farkı içerir
+        d._sonKayit = derinKopya(uzak);
+        d.surumNo = uzakSurum;
+        d.veri = Object.assign(bosVeri(), m.sonuc);
+        if (window.UI) {
+          if (UI.bannerKapat) UI.bannerKapat("kayit-cakisma");
+          UI.bildir("Diğer kullanıcının değişiklikleriyle birleştirildi");
+          if (UI.ciz) UI.ciz();                 // ekran birleşik veriyi göstersin
+        }
+        return d._flush(sessiz === undefined ? true : sessiz);
+      })["catch"](function (e) {
+        if (window.UI) UI.bildir("Birleştirme yapılamadı: " + (e.message || e), true);
+      });
+  };
+
+  /* Çakışma çözümü — her iki seçenek de ÜÇ YOLLU BİRLEŞİK sonucu yazar; yalnız
+     çakışan alanlarda tercih uygulanır. "uzak" = o alanlarda diğer kullanıcının
+     değeri, "yerel" (eski adıyla "uzerine") = o alanlarda benim değerim.
+     Çakışmayan hiçbir değişiklik hiçbir seçenekte kaybolmaz. */
   d.cakismaCoz = function (mod) {
     if (!d.aktifMusteriId || !window.SB) return Promise.resolve("Bağlantı yok");
-    if (mod === "uzak") return d.yukle(d.aktifMusteriId).then(function () { return null; });
-    return SB.from("customers").select("surum_no").eq("id", d.aktifMusteriId).single()
-      .then(function (q) {
-        if (q.error) return q.error.message;
-        d.surumNo = q.data.surum_no || 0;
-        return d._flush(true).then(function () { return null; });
-      });
+    if (mod === "uzerine") mod = "yerel";       // eski API adı korunur
+    var b = d._bekleyenCakisma;
+    if (!b) {
+      // Bekleyen birleştirme bağlamı yok (eski akış/yoğun yarış): güvenli yollar
+      if (mod === "uzak") return d.yukle(d.aktifMusteriId).then(function () { return null; });
+      return d._otoBirlestir(d.aktifMusteriId, true).then(function () { return null; });
+    }
+    var sonuc = derinKopya(b.sonuc);            // yerel tercihli birleşik taban
+    if (mod === "uzak") b.cakismalar.forEach(function (c) { yolaYaz(sonuc, c.yol, c.uzak); });
+    d._bekleyenCakisma = null;
+    d._sonKayit = derinKopya(b.uzak);           // geri-al yaması yalnız bizim farkı içersin
+    d.surumNo = b.uzakSurum;
+    d.veri = Object.assign(bosVeri(), sonuc);
+    return d._flush(true).then(function () { return null; });
   };
 
   /* ---- Geri Al (son sürüme dönüş — ters JSON Patch uygulanır) ---- */
@@ -241,6 +479,7 @@ window.Depo = (function () {
     if (d._kayitBekliyor) { clearTimeout(kayitZamanlayici); d._flush(true); }
     d.izlemeyiBirak();
     d.aktifMusteriId = null; d.veri = bosVeri(); d.surumNo = 0; d._sonKayit = null;
+    d._bekleyenCakisma = null; d._birlesimDeneme = 0;
   };
 
   /* ---- Gerçek zamanlı izleme (eşzamanlı düzenleme farkındalığı) ----

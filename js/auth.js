@@ -410,18 +410,22 @@ window.App = (function () {
     });
   };
 
-  /* Başka bir kullanıcı açık müşteriyi güncellediğinde çağrılır (Realtime) */
+  /* Başka bir kullanıcı açık müşteriyi güncellediğinde çağrılır (Realtime).
+     Bekleyen yerel değişiklik ve açık form (modal) YOKSA veri sessizce tazelenir
+     — böylece "yarım saat bayat ekran" kalmaz ve kimseye 'yenileyin' demek gerekmez.
+     Kaydedilmemiş değişiklik VARSA hiçbir şeye dokunulmaz: kayıt anında depo.js
+     üç yollu birleştirmeyi otomatik yapar. */
   App.uzaktanGuncelleme = function (surum) {
-    UI.bildir("Bu müşteriyi başka bir kullanıcı güncelledi (sürüm " + surum + "). En güncel veri için yenileyin.", true);
-    var altlik = document.querySelector("#uygulama .kenar .kenar-altlik");
-    if (!altlik || altlik.querySelector(".uzak-guncelleme")) return;
-    var yenile = el("button", { class: "btn kucuk uzak-guncelleme", type: "button",
-      style: "width:100%;margin-top:8px;background:" + OKSIT + ";color:#fff;border:0" }, ["⟳ Başkası güncelledi — Yenile"]);
-    yenile.onclick = function () {
-      if (!Depo.aktifMusteriId) return;
-      Depo.yukle(Depo.aktifMusteriId).then(function () { UI.bildir("Yenilendi"); UI.ciz(); App.kenarAltligiEkle(); });
-    };
-    altlik.appendChild(yenile);
+    if (!Depo.aktifMusteriId) return;
+    var modalAcik = document.querySelector(".modal-fon");
+    if (!modalAcik && Depo.temizMi && Depo.temizMi()) {
+      Depo.yukle(Depo.aktifMusteriId).then(function () {
+        UI.bildir("Veri güncellendi (başka bir kullanıcı kaydetti)");
+        UI.ciz();
+        if (App.kenarAltligiEkle) App.kenarAltligiEkle();
+      })["catch"](function () {});
+    }
+    // Aksi hâlde sessiz kal: birleştirme kayıt sırasında devreye girer.
   };
 
   /* ============================================================
