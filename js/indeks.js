@@ -61,6 +61,31 @@ window.Indeks = (function () {
     dokumanListe().forEach(function (d) { if (d.id === id) s = d; });
     return s;
   }
+  /* ---- Emisyon Envanteri köprüsü: bolumler[] içindeki kayıt numaraları ----
+     Doküman, faaliyet verisi kayıtlarına numarasıyla bağlanır (ör. MDL-ELK-10);
+     modül-birim-dönem bağlamı kayıttan türetilir, ayrı bir bağ tablosu tutulmaz. */
+  var FAALIYET_MODULLER = [
+    { id: "elektrik", ad: "Elektrik (Kapsam 2)" },
+    { id: "faaliyet", ad: "Yakıt / Faaliyet (Kapsam 1)" },
+    { id: "sogutucu", ad: "Soğutucu Gaz (Kaçak)" }
+  ];
+  function faaliyetDizi(modulId) { return (Depo.veri && Depo.veri[modulId]) || []; }
+  function faaliyetKaydiBul(no) {
+    var s = null;
+    FAALIYET_MODULLER.forEach(function (m) {
+      if (s) return;
+      faaliyetDizi(m.id).forEach(function (k) { if (!s && String(k.no) === String(no)) s = { modul: m, kayit: k }; });
+    });
+    return s;
+  }
+  function kayitOzet(b) {
+    var k = b.kayit, parca = [b.modul.ad];
+    var birim = k.birimId ? ((bul(k.birimId) || {}).ad || k.birimId) : "";
+    if (birim) parca.push(birim);
+    if (k.donem) parca.push(k.donem);
+    else if (k.ekipman) parca.push(UI.kisalt(k.ekipman, 30));
+    return parca.join(" • ");
+  }
   /* Bir RFI kaleminin bir birimdeki gelen kanıt sayısı (Excel "Gelen Kanıt (oto)") */
   function kanitSayisi(rfiNo, tesisId) {
     var n = 0;
@@ -1010,7 +1035,15 @@ window.Indeks = (function () {
           el("td", null, rfiHucre),
           el("td", null, [tarihGoster(d.tarih)]),
           el("td", null, (d.bolumler || []).length
-            ? d.bolumler.map(function (b) { return el("span", { class: "idx-cip" }, [UI.kisalt(b, 26)]); })
+            ? d.bolumler.map(function (b) {
+                if (bolumSecenekleri().indexOf(b) >= 0)
+                  return el("span", { class: "idx-cip" }, [UI.kisalt(b, 26)]);
+                var bag = faaliyetKaydiBul(b);
+                return el("span", { class: "idx-cip",
+                  style: bag ? "" : "background:#fdecec;border:1px solid #e0b4b4;color:#9f3a38",
+                  title: bag ? kayitOzet(bag) : "Kayıt bulunamadı — silinmiş ya da numarası değişmiş olabilir" },
+                  [(bag ? "" : "⚠ ") + UI.kisalt(String(b), 26)]);
+              })
             : ["—"]),
           el("td", { class: "satir-islem" }, [
             el("button", { class: "btn kucuk ikincil", type: "button", style: "margin-left:6px",
@@ -1096,10 +1129,90 @@ window.Indeks = (function () {
       bolumIzgara
     ]);
 
+    /* Emisyon Envanteri kayıt bağları: Modül → Birim → Kayıt kademeli seçimi.
+       bolumler[] iki tür değer taşır: rapor bölümü adı (yukarıdaki kutular) ve
+       faaliyet kayıt numarası (buradaki çipler); kaydederken ikisi birleştirilir. */
+    var seciliKayitlar = [];
+    (kayit && kayit.bolumler ? kayit.bolumler : []).forEach(function (b) {
+      if (bolumSecenekleri().indexOf(b) < 0) seciliKayitlar.push(b);
+    });
+    var cipKap = el("div", { style: "display:flex;gap:6px;flex-wrap:wrap;margin-top:8px" });
+    function cipCiz() {
+      cipKap.innerHTML = "";
+      if (!seciliKayitlar.length) {
+        cipKap.appendChild(el("span", { class: "yardim" }, ["Henüz kayıt bağlanmadı."]));
+        return;
+      }
+      seciliKayitlar.forEach(function (no, i) {
+        var bag = faaliyetKaydiBul(no);
+        cipKap.appendChild(el("span", { class: "idx-cip",
+          style: bag ? "" : "background:#fdecec;border:1px solid #e0b4b4;color:#9f3a38",
+          title: bag ? kayitOzet(bag) : "Kayıt bulunamadı — silinmiş ya da numarası değişmiş olabilir" }, [
+          (bag ? "" : "⚠ ") + no,
+          el("span", { role: "button", tabindex: "0", title: "Bağı kaldır",
+            style: "cursor:pointer;margin-left:4px;font-weight:700",
+            onclick: function () { seciliKayitlar.splice(i, 1); cipCiz(); } }, ["×"])
+        ]));
+      });
+    }
+    cipCiz();
+    var modulSec = el("select", { "aria-label": "Modül seç" });
+    modulSec.appendChild(el("option", { value: "" }, ["— Modül —"]));
+    FAALIYET_MODULLER.forEach(function (m) {
+      var n = faaliyetDizi(m.id).length;
+      if (n) modulSec.appendChild(el("option", { value: m.id }, [m.ad + " (" + n + ")"]));
+    });
+    var kayitBirimSec = el("select", { "aria-label": "Birim seç" });
+    var kayitSec = el("select", { "aria-label": "Kayıt seç" });
+    kayitBirimSec.disabled = true; kayitSec.disabled = true;
+    function kayitBirimleriDoldur() {
+      kayitBirimSec.innerHTML = ""; kayitSec.innerHTML = ""; kayitSec.disabled = true;
+      if (!modulSec.value) { kayitBirimSec.disabled = true; return; }
+      var sayilar = {};
+      faaliyetDizi(modulSec.value).forEach(function (k) {
+        var b = k.birimId || "(birimsiz)";
+        sayilar[b] = (sayilar[b] || 0) + 1;
+      });
+      kayitBirimSec.appendChild(el("option", { value: "" }, ["— Birim —"]));
+      Object.keys(sayilar).sort().forEach(function (b) {
+        var ad = b === "(birimsiz)" ? b : ((bul(b) || {}).ad || b);
+        kayitBirimSec.appendChild(el("option", { value: b }, [ad + " (" + sayilar[b] + ")"]));
+      });
+      kayitBirimSec.disabled = false;
+    }
+    function kayitlariDoldur() {
+      kayitSec.innerHTML = "";
+      if (!kayitBirimSec.value) { kayitSec.disabled = true; return; }
+      kayitSec.appendChild(el("option", { value: "" }, ["— Kayıt —"]));
+      var kayitlar = faaliyetDizi(modulSec.value).filter(function (k) {
+        return (k.birimId || "(birimsiz)") === kayitBirimSec.value;
+      });
+      kayitlar.sort(function (a, b) { return String(a.no).localeCompare(String(b.no), "tr", { numeric: true }); });
+      kayitlar.forEach(function (k) {
+        var ek = k.donem || (k.ekipman ? UI.kisalt(k.ekipman, 24) : "");
+        kayitSec.appendChild(el("option", { value: String(k.no) }, [k.no + (ek ? " — " + ek : "")]));
+      });
+      kayitSec.disabled = false;
+    }
+    modulSec.addEventListener("change", kayitBirimleriDoldur);
+    kayitBirimSec.addEventListener("change", kayitlariDoldur);
+    var kayitAlan = el("div", { class: "alan genis" }, [
+      el("label", null, ["Emisyon Envanteri Kayıt Bağları",
+        el("span", { class: "yardim" }, [" modül → birim → kayıt seçip Bağla'ya basın"])]),
+      el("div", { style: "display:flex;gap:6px;flex-wrap:wrap;align-items:center" }, [
+        modulSec, kayitBirimSec, kayitSec,
+        el("button", { class: "btn kucuk ikincil", type: "button", onclick: function () {
+          if (!kayitSec.value) return;
+          if (seciliKayitlar.indexOf(kayitSec.value) < 0) { seciliKayitlar.push(kayitSec.value); cipCiz(); }
+        } }, ["+ Bağla"])
+      ]),
+      cipKap
+    ]);
+
     f.not = UI.alan({ anahtar: "not", etiket: "Not", tip: "uzun_metin", deger: kayit ? kayit.not : "" });
 
     var govde = el("div", { class: "form-izgara" },
-      [f.ad, f.link, tesisAlan, f.tarih, rfiAlan, bolumAlan, f.not]);
+      [f.ad, f.link, tesisAlan, f.tarih, rfiAlan, bolumAlan, kayitAlan, f.not]);
 
     UI.modal(yeni ? "Yeni Doküman Kaydı" : kayit.id + " — Düzenle", govde, [
       { etiket: "Vazgeç" },
@@ -1118,7 +1231,8 @@ window.Indeks = (function () {
           hedef.tesisId = v.tesisId;
           hedef.tarih = v.tarih || bugunIso();
           hedef.rfiNolar = Object.keys(seciliNolar).map(Number).sort(function (a, b) { return a - b; });
-          hedef.bolumler = bolumSecenekleri().filter(function (b) { return seciliBolumler[b]; });
+          hedef.bolumler = bolumSecenekleri().filter(function (b) { return seciliBolumler[b]; })
+            .concat(seciliKayitlar);
           hedef.not = v.not.trim();
           if (yeni) dokumanListe().push(hedef);
           Depo.kaydet();
