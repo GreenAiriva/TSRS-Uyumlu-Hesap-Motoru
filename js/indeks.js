@@ -11,15 +11,18 @@ window.Indeks = (function () {
   var el = function () { return UI.el.apply(null, arguments); };
 
   /* ---- Sabit listeler (Excel 09_Listeler sayfasındaki karşılıkları) ---- */
-  var TURLER = ["Holding", "İştirak", "Tesis", "Ocak", "Depo", "Ofis", "Showroom", "Departman"];
-  var TUZEL  = { "Holding": 1, "İştirak": 1 };          // sahiplik % yalnız tüzel birimlerde anlamlı
+  var TURLER = ["Grup", "İştirak", "Tesis", "Ocak", "Depo", "Ofis", "Showroom", "Departman"];
+  /* "Holding" 30.07.2026'da "Grup" olarak yeniden adlandırıldı (kök birim türü).
+     Eski kayıtlar bozulmasın diye "Holding" anahtarı tüzel/rozet tablolarında
+     geriye dönük uyumluluk için bırakıldı; TURLER listesinde artık sunulmuyor. */
+  var TUZEL  = { "Grup": 1, "İştirak": 1, "Holding": 1 };  // sahiplik % yalnız tüzel birimlerde anlamlı
   var DURUMLAR = ["Aktif", "Pasif", "Kapandı", "Teyit Bekliyor"];
   var ONEK = function (tur) {                            // ID öneki: tür → ORG / TES / DEP
     if (TUZEL[tur]) return "ORG";
     if (tur === "Departman") return "DEP";
     return "TES";
   };
-  var TUR_SINIF = { "Holding": "k2", "İştirak": "k2", "Departman": "k3" }; // rozet rengi (vars: k1)
+  var TUR_SINIF = { "Grup": "k2", "Holding": "k2", "İştirak": "k2", "Departman": "k3" }; // rozet rengi (vars: k1)
 
   /* ---- RFI sabitleri (Excel 03_RFI_Register + 09_Listeler: 9-durumlu yaşam döngüsü) ---- */
   var RFI_DURUMLAR = ["Henüz İstenmedi", "İstendi", "İstendi — Henüz Gelmedi", "Kısmen Teslim Edildi",
