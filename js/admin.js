@@ -24,7 +24,7 @@ window.Admin = (function () {
     { ad: "ef_tasimacilik",  baslik: "Yük Taşımacılığı EF",               dosya: "ef_tasimacilik.js" },
     { ad: "ef_toplu_tasima", baslik: "Toplu Taşıma / Yolcu EF",           dosya: "ef_toplu_tasima.js" },
     { ad: "ef_elektrik",     baslik: "Elektrik Şebeke EF",                dosya: "ef_elektrik.js" },
-    { ad: "kip_ar6",         baslik: "KIP / GWP Değerleri (IPCC AR6)",    dosya: "kip_ar6.js" },
+    { ad: "kip_ar5",         baslik: "KIP / GWP Değerleri (IPCC AR5)",    dosya: "kip_ar5.js" },
     { ad: "kacak_oranlari",  baslik: "Varsayılan Kaçak Oranları",         dosya: "kacak_oranlari.js" },
     { ad: "yakit_ekonomisi", baslik: "Yakıt Ekonomisi Varsayılanları",    dosya: "yakit_ekonomisi.js" }
   ];

@@ -132,7 +132,7 @@ window.Panel = (function () {
         el("table", { class: "veri" }, [
           el("thead", null, [el("tr", null, [
             el("th", null, ["Gaz"]), el("th", { class: "sayi" }, ["Kütle (kg)"]),
-            el("th", { class: "sayi" }, ["KIP (AR6)"]), el("th", { class: "sayi" }, ["tCO2e"])
+            el("th", { class: "sayi" }, ["KIP (AR5)"]), el("th", { class: "sayi" }, ["tCO2e"])
           ])]),
           el("tbody", null, [
             el("tr", null, [el("td", null, ["CO2 — Karbondioksit"]), el("td", { class: "sayi" }, [Motor.fmt(g.co2kg, 1)]),

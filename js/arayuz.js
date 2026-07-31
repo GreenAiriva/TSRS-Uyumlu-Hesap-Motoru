@@ -306,7 +306,7 @@ window.UI = (function () {
       { yol: "panel",   ad: "Gösterge Paneli",      ikon: "◧", ciz: function (k) { Panel.ciz(k); } },
       { yol: "kilavuz", ad: "Kılavuz",              ikon: "✦", ciz: cizKilavuz },
       { yol: "rapor",   ad: "Envanter Raporu",      ikon: "▤", ciz: function (k) { Rapor.ciz(k); }, ref: "TSRS 2 md. 29(a) • GHG Protokolü" },
-      { yol: "kutuphane", ad: "Veri Kütüphanesi", ikon: "▩", ciz: cizKutuphane, ref: "Emisyon faktörü kaynakları • belirsizlik • IPCC/DEFRA/AR6" },
+      { yol: "kutuphane", ad: "Veri Kütüphanesi", ikon: "▩", ciz: cizKutuphane, ref: "Emisyon faktörü kaynakları • belirsizlik • IPCC/DEFRA/AR5" },
       { yol: "araclar", ad: "IPCC Hesap Araçları", ikon: "⚙", ciz: cizAraclar, ref: "CHP (kojenerasyon) • gelişmiş HFC/PFC • belirsizlik" },
       { grup: "Veri Girişi" },
       { yol: "profil",   ad: "Şirket Profili",            ikon: "▣", ciz: cizProfil, durum: "profil", ref: "TSRS 1 md. 20, 27, 60-69" },
@@ -399,7 +399,7 @@ window.UI = (function () {
         el("div", { class: "alt" }, [Depo.ayar("alt_baslik") || ""])
       ]),
       navKok,
-      el("div", { class: "surum" }, ["Sürüm " + (Depo.ayar("surum") || "3.0") + " — " + (Depo.ayar("kip_seti") || "IPCC AR6")])
+      el("div", { class: "surum" }, ["Sürüm " + (Depo.ayar("surum") || "3.0") + " — " + (Depo.ayar("kip_seti") || "IPCC AR5")])
     ]);
     ustBaslik = el("h2"); ustRef = el("div", { class: "ref" });
     ustAksiyon = el("div", { style: "display:flex;gap:10px;flex:none;align-items:center" });
@@ -659,7 +659,7 @@ window.UI = (function () {
     (function () {
       var izgara = el("div", { class: "form-izgara" });
       var sonuc = el("div", { class: "bilgi", style: "margin:14px 0 0" });
-      var gazlar = Depo.set("kip_ar6").map(function (r) { return r.Gas_Name; }).filter(Boolean);
+      var gazlar = Depo.set("kip_ar5").map(function (r) { return r.Gas_Name; }).filter(Boolean);
       var aGaz = UI.alan({ anahtar: "gaz", etiket: "Gaz", tip: "metin", datalist: gazlar,
         yardim: "örn. HFC-134a, R-410A, PFC-14" });
       var aMS = UI.alan({ anahtar: "montajSarj", etiket: "Yeni Ekipman İlk Dolum (kg)", tip: "sayi" });
@@ -1652,7 +1652,7 @@ window.UI = (function () {
     var izgara = el("div", { class: "form-izgara" });
     var onizleme = el("div", { class: "bilgi", style: "margin:16px 0 0" });
 
-    var gazlar = Depo.set("kip_ar6").map(function (r) { return r.Gas_Name; }).filter(Boolean);
+    var gazlar = Depo.set("kip_ar5").map(function (r) { return r.Gas_Name; }).filter(Boolean);
     var aNo = noAlaniOlustur(s.no, "S");
     var aBirimSec = birimAlaniOlustur(kayit ? (s.birimId || "") : null);
     var aAd = UI.alan({ anahtar: "ekipman", etiket: "Ekipman / Sistem Adı", tip: "metin", zorunlu: true, deger: s.ekipman,

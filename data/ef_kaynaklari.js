@@ -90,12 +90,12 @@ VERI.ef_kaynaklari = {
   "tsrs_ref": "TSRS 2 md. 29(a)(ii) — Kapsam 2 ikili raporlama (lokasyon + piyasa)",
   "ipcc_arac": "—"
  },
- "kip_ar6": {
+ "kip_ar5": {
   "ad": "Küresel Isınma Potansiyelleri (KIP/GWP)",
-  "kaynak": "IPCC Altıncı Değerlendirme Raporu (AR6), Çalışma Grubu I, Bölüm 7, Tablo 7.15 — 100 yıllık KIP değerleri",
-  "guncelleme": "AR6 (2021)",
+  "kaynak": "IPCC Beşinci Değerlendirme Raporu (AR5), Çalışma Grubu I, Bölüm 8, Ek 8.A — 100 yıllık KIP değerleri",
+  "guncelleme": "AR5 (2013)",
   "belirsizlik": {
-   "genel": "CO2=1 (referans). CH4 ±%30, N2O ±%20, florlu gazlar ±%20-30 (AR6 Tablo 7.15 güven aralıkları)"
+   "genel": "CO2=1 (referans). CH4 ±%30, N2O ±%20, florlu gazlar ±%20-30 (AR5 Bölüm 8 güven aralıkları)"
   },
   "tsrs_ref": "TSRS 2 md. 29(a)(i) — tüm gazların CO2e'ye dönüştürülmesi",
   "ipcc_arac": "—"
