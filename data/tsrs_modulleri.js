@@ -160,7 +160,7 @@ VERI.tsrs_modulleri = [
    "etiket": "Süreçte kullanılan girdi ve kaynaklar",
    "sutunlar": [
     {"anahtar": "kaynak", "etiket": "Girdi / Kaynak", "tip": "metin", "yardim": "Risk değerlendirmede kullandığınız veri/bilgi kaynağı (örn. IPCC senaryoları, hava verileri, iç denetim raporları, paydaş görüşleri). NEDEN: **TSRS 2 md. 25(a)**, kullanılan girdi ve parametrelerin açıklanmasını ister."},
-    {"anahtar": "referans", "etiket": "Referans / Versiyon", "tip": "metin", "yardim": "Kaynağın sürümü veya tarihi (örn. 'NGFS 2023', 'AR6'). NEDEN: Şeffaflık ve tekrar edilebilirlik için hangi versiyonun kullanıldığı önemlidir."},
+    {"anahtar": "referans", "etiket": "Referans / Versiyon", "tip": "metin", "yardim": "Kaynağın sürümü veya tarihi (örn. 'NGFS 2023', 'AR5'). NEDEN: Şeffaflık ve tekrar edilebilirlik için hangi versiyonun kullanıldığı önemlidir."},
     {"anahtar": "kullanim", "etiket": "Kullanım Alanı", "tip": "uzun_metin", "yardim": "Bu girdinin süreçte nasıl kullanıldığı (örn. 'fiziksel risk haritalamasında', 'geçiş riski fiyatlandırmasında'). NEDEN: Girdinin karar almaya nasıl katkı verdiğini gösterir."}
    ]
   },
@@ -268,7 +268,7 @@ VERI.tsrs_modulleri = [
    "etiket": "Dikkate alınan kaynak ve rehberler",
    "sutunlar": [
     {"anahtar": "kaynak", "etiket": "Kaynak / Rehber", "tip": "metin", "yardim": "Raporu hazırlarken başvurduğunuz rehber/standart (örn. GHG Protocol, IPCC 2006, SASB cilt rehberi). NEDEN: **TSRS 1 md. 54-59**, başka kaynakların nasıl dikkate alındığının açıklanmasını ister."},
-    {"anahtar": "referans", "etiket": "Referans / Versiyon", "tip": "metin", "yardim": "Kaynağın versiyonu/yılı (örn. 'GHG Protocol 2015', 'AR6'). NEDEN: Hangi sürümün esas alındığı izlenebilirlik için önemlidir."},
+    {"anahtar": "referans", "etiket": "Referans / Versiyon", "tip": "metin", "yardim": "Kaynağın versiyonu/yılı (örn. 'GHG Protocol 2015', 'AR5'). NEDEN: Hangi sürümün esas alındığı izlenebilirlik için önemlidir."},
     {"anahtar": "dikkate", "etiket": "Dikkate Alındı", "tip": "secim", "liste": "evet_hayir", "yardim": "Bu kaynağı değerlendirmeye aldınız mı? NEDEN: Standart, kaynakların bilinçli olarak dikkate alınıp alınmadığını göstermenizi bekler."},
     {"anahtar": "uygulandi", "etiket": "Uygulandı", "tip": "secim", "liste": "evet_hayir", "yardim": "Dikkate aldıktan sonra fiilen uyguladınız mı? NEDEN: Dikkate almak ile uygulamak farklıdır; uygulanmadıysa gerekçe beklenir."},
     {"anahtar": "gerekce", "etiket": "Uygulanmadıysa Gerekçe", "tip": "metin", "yardim": "Kaynak dikkate alınıp uygulanmadıysa nedeni. NEDEN: Şeffaflık; bir rehberin neden izlenmediği açıklanmalıdır."},

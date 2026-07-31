@@ -10,12 +10,12 @@
 window.VERI = window.VERI || {};
 VERI.ayarlar = {
  "uygulama_adi": "Karbon Ayak İzi Hesap Motoru",
- "alt_baslik": "TSRS 1 & 2 Uyumlu — GHG Protokolü — IPCC AR6 — Madencilik Özel",
+ "alt_baslik": "TSRS 1 & 2 Uyumlu — GHG Protokolü — IPCC AR5 — Madencilik Özel",
  "surum": "3.0 (Web Uygulaması)",
  "vurgu_rengi": "#B4642D",
- "kip_seti": "IPCC AR6 (100 yıllık)",
+ "kip_seti": "IPCC AR5 (100 yıllık)",
  "para_birimi": "TL",
- "metodoloji_beyani": "Bu karbon envanteri; GHG Protokolü Kurumsal Muhasebe ve Raporlama Standardı (Revize Basım), IPCC 2006 Ulusal Sera Gazı Envanterleri Rehberi (2019 güncellemesi) ve TSRS 2 — İklimle İlgili Açıklamalar (KGK) standardına uygun olarak hazırlanmıştır. Küresel Isınma Potansiyelleri IPCC Altıncı Değerlendirme Raporu'ndan (AR6, 100 yıllık) alınmıştır. Kapsam 2 emisyonları TSRS 2 md. 29(a)(ii) uyarınca hem Lokasyona Dayalı hem de Piyasaya Dayalı yaklaşımlarla raporlanmıştır. Florlu gazlardan kaynaklanan kaçak emisyonlar IPCC 2006 Cilt 3 Bölüm 7'ye göre hesaplanmıştır.",
+ "metodoloji_beyani": "Bu karbon envanteri; GHG Protokolü Kurumsal Muhasebe ve Raporlama Standardı (Revize Basım), IPCC 2006 Ulusal Sera Gazı Envanterleri Rehberi (2019 güncellemesi) ve TSRS 2 — İklimle İlgili Açıklamalar (KGK) standardına uygun olarak hazırlanmıştır. Küresel Isınma Potansiyelleri IPCC Beşinci Değerlendirme Raporu'ndan (AR5, 100 yıllık) alınmıştır. Kapsam 2 emisyonları TSRS 2 md. 29(a)(ii) uyarınca hem Lokasyona Dayalı hem de Piyasaya Dayalı yaklaşımlarla raporlanmıştır. Florlu gazlardan kaynaklanan kaçak emisyonlar IPCC 2006 Cilt 3 Bölüm 7'ye göre hesaplanmıştır.",
  "kilavuz_adimlar": [
   "Şirket Profili sayfasını doldurun: raporlama dönemi, sınır, baz yıl ve TSRS muafiyet seçimleri.",
   "Emisyon verilerini girin: Faaliyet Verisi (Kapsam 1 ve 3), Soğutucu Akışkan ve Kaçak, Kapsam 2 Elektrik. Sistem CO2e değerini otomatik hesaplar.",

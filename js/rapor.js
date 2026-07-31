@@ -297,7 +297,7 @@ window.Rapor = (function () {
     var gazToplamT = g.co2kg / 1000 + g.ch4kg * c4 / 1000 + g.n2okg * n2 / 1000 + g.fgazTco2e;
     sMet.appendChild(el("h3", { style: "margin:14px 0 2px;font-size:13px" }, ["Gaz Bazında Kütle ve CO2 Eşdeğeri (TSRS 2 md. 29(a)(i))"]));
     sMet.appendChild(el("table", null, [
-      th(["Gaz", { t: "Kütle (kg)", sinif: "sayi" }, { t: "KIP (AR6 100 yıl)", sinif: "sayi" }, { t: "tCO2e", sinif: "sayi" }]),
+      th(["Gaz", { t: "Kütle (kg)", sinif: "sayi" }, { t: "KIP (AR5 100 yıl)", sinif: "sayi" }, { t: "tCO2e", sinif: "sayi" }]),
       el("tbody", null, [
         trS(["CO2", { sayi: Motor.fmt(g.co2kg, 1) }, { sayi: "1" }, { sayi: Motor.fmt(g.co2kg / 1000, 3) }]),
         trS(["CH4 (fosil)", { sayi: Motor.fmt(g.ch4kg, 3) }, { sayi: Motor.fmt(c4, 1) }, { sayi: Motor.fmt(g.ch4kg * c4 / 1000, 3) }]),

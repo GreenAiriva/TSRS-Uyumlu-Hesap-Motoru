@@ -13,7 +13,7 @@
 Bu uygulama; **TSRS 1** (Sürdürülebilirlikle İlgili Finansal Bilgilerin Açıklanması — Genel Hükümler) ve **TSRS 2** (İklimle İlgili Açıklamalar) standartlarına uygun bir sürdürülebilirlik raporu hazırlamak isteyen şirketler için tasarlanmıştır.
 
 - **Çevrimdışı çalışır** — `index.html` çift tıkla, internet/sunucu/kurulum gerekmez
-- **GHG Protokolü** + **IPCC AR6** + **TSRS 2 Ek Ciltleri** (sektör bazlı)
+- **GHG Protokolü** + **IPCC AR5** + **TSRS 2 Ek Ciltleri** (sektör bazlı)
 - **3 kapsam** sera gazı (Kapsam 1, 2, 3) emisyon hesabı
 - **4 TSRS direği** — Yönetişim, Strateji, Risk Yönetimi, Metrikler ve Hedefler
 - **Yönetim paneli** — kod yazmadan referans tabloları/listeler/form alanları/metinler düzenleme
@@ -26,7 +26,7 @@ KarbonMotoru_WebApp/
 ├── index.html              ← Ana giriş — çift tıkla aç
 ├── css/                    ← Tasarım sistemi
 ├── js/                     ← Hesap motoru + UI
-├── data/                   ← Referans veriler (EF tabloları, KIP/AR6, vb.)
+├── data/                   ← Referans veriler (EF tabloları, KIP/AR5, vb.)
 ├── input_cloud/            ← [.gitignored] Müşteri ham verisi
 ├── output_cloud/           ← [.gitignored] Üretilen JSON yedek + raporlar
 ├── docs/                   ← Belgeler, kılavuzlar
@@ -49,7 +49,7 @@ KarbonMotoru_WebApp/
 - **TSRS 2** — İklimle İlgili Açıklamalar (KGK, 1 Ocak 2024)
 - **TSRS 2 Ek Ciltleri** — Sektör bazlı rehberlik (53 cilt, ISSB/SASB türetimli)
 - **GHG Protokolü** — Kurumsal Muhasebe ve Raporlama Standardı (WRI/WBCSD, 2004)
-- **IPCC AR6** — Altıncı Değerlendirme Raporu, 100-yıllık KIP değerleri
+- **IPCC AR5** — Beşinci Değerlendirme Raporu, 100-yıllık KIP değerleri
 
 ## Geliştirme
 

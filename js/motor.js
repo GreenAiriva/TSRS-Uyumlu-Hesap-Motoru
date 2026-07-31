@@ -3,7 +3,7 @@
    Excel'deki formüllerin JavaScript karşılığı. Emisyon faktörlerini ve KIP
    (GWP) değerlerini data/ klasöründeki tablolardan canlı okur; Yönetim
    Paneli'nde yapılan düzenlemeler hesaplara anında yansır.
-   Metodoloji: GHG Protokolü • IPCC 2006 (2019 güncellemesi) • IPCC AR6 KIP.
+   Metodoloji: GHG Protokolü • IPCC 2006 (2019 güncellemesi) • IPCC AR5 KIP.
    ============================================================================ */
 "use strict";
 window.Motor = (function () {
@@ -35,21 +35,21 @@ window.Motor = (function () {
   /* ---- KIP (GWP) arama ---- */
   M.gwpBul = function (gazAdi) {
     if (!gazAdi) return null;
-    var t = Depo.set("kip_ar6");
+    var t = Depo.set("kip_ar5");
     var hedef = String(gazAdi).trim().toLowerCase();
     for (var i = 0; i < t.length; i++) {
       var r = t[i];
-      if (String(r.Gas_Name || "").trim().toLowerCase() === hedef) return sayi(r.GWP_AR6_100yr);
-      if (String(r.Chemical_Formula || "").trim().toLowerCase() === hedef) return sayi(r.GWP_AR6_100yr);
+      if (String(r.Gas_Name || "").trim().toLowerCase() === hedef) return sayi(r.GWP_AR5_100yr);
+      if (String(r.Chemical_Formula || "").trim().toLowerCase() === hedef) return sayi(r.GWP_AR5_100yr);
     }
     // kısmi eşleşme (örn. "HFC-134a")
     for (var j = 0; j < t.length; j++) {
-      if (String(t[j].Gas_Name || "").toLowerCase().indexOf(hedef) === 0) return sayi(t[j].GWP_AR6_100yr);
+      if (String(t[j].Gas_Name || "").toLowerCase().indexOf(hedef) === 0) return sayi(t[j].GWP_AR5_100yr);
     }
     return null;
   };
-  M.gwpCH4 = function () { var g = M.gwpBul("Methane – fossil"); return g || 29.8; };
-  M.gwpN2O = function () { var g = M.gwpBul("Nitrous oxide"); return g || 273; };
+  M.gwpCH4 = function () { var g = M.gwpBul("Methane – fossil"); return g || 30; };
+  M.gwpN2O = function () { var g = M.gwpBul("Nitrous oxide"); return g || 265; };
 
   /* ---- EF birimini, girilen miktar birimine çevirme katsayısı ----
      EF "kg gaz / EF-birimi" cinsindendir; miktar "giriş-birimi" cinsindendir.
@@ -657,7 +657,7 @@ window.Motor = (function () {
     if (T.k1.kacak) ekle({
       metrik_kodu: "K1-KACAK", ad: "Kapsam 1 — Kaçak (F-gaz)", deger: T.k1.kacak, birim: "tCO2e",
       formul: "Σ (Kaçak_kg × KIP_gaz) / 1000",
-      ef_kaynak: "IPCC 2006 Cilt 3 Böl. 7 + AR6 KIP",
+      ef_kaynak: "IPCC 2006 Cilt 3 Böl. 7 + AR5 KIP",
       tsrs_ref: ["TSRS 2 md. 29(a)(i)"],
       belirsizlik: { yontem: "Tier 1", aktivite: "±10%", ef: "±50%" }
     });
@@ -734,7 +734,7 @@ window.Motor = (function () {
       emisyon_kayitlari: kayitlar,
       sektor_metrikleri: sektorKayitlari,
       belirsizlik: belirsizlik,
-      metodoloji: "GHG Protokolü • IPCC 2006 (2019 güncellemesi) • IPCC AR6 KIP • Tier 1 belirsizlik",
+      metodoloji: "GHG Protokolü • IPCC 2006 (2019 güncellemesi) • IPCC AR5 KIP • Tier 1 belirsizlik",
       hatalar: T.hatalar
     };
   };

@@ -1,6 +1,6 @@
 ================================================================
   KARBON AYAK İZİ HESAP MOTORU — WEB UYGULAMASI (Sürüm 3.0)
-  TSRS 1 & 2 Uyumlu • GHG Protokolü • IPCC AR6 • Madencilik Özel
+  TSRS 1 & 2 Uyumlu • GHG Protokolü • IPCC AR5 • Madencilik Özel
 ================================================================
 
 NASIL AÇILIR?
@@ -26,7 +26,7 @@ data/ ............. DÜZENLENEBİLİR veriler (kategorilere ayrılmış)
    ayarlar.js ............ Başlıklar, metodoloji beyanı, metinler
    listeler.js ........... Tüm açılır liste seçenekleri
    tsrs_modulleri.js ..... TSRS form alanı tanımları
-   kip_ar6.js ............ Küresel Isınma Potansiyelleri (GWP)
+   kip_ar5.js ............ Küresel Isınma Potansiyelleri (GWP)
    ef_sabit_yanma.js ..... Sabit yanma emisyon faktörleri (IPCC)
    ef_mobil_yakit.js ..... Araç yakıt bazlı faktörler
    ef_mobil_mesafe.js .... Araç mesafe bazlı faktörler
@@ -96,14 +96,14 @@ GÜNLÜK KULLANIM (5 ADIM)
 Sol menüdeki renkli noktalar ilerlemenizi gösterir:
 yeşil = tamamlandı, sarı = devam ediyor, gri = başlanmadı.
 
-NOT: Soğutucu gaz tablosuna, IPCC AR6 saf gazlarına ek olarak
+NOT: Soğutucu gaz tablosuna, IPCC AR5 saf gazlarına ek olarak
 sahada yaygın kullanılan karışımlar (R-410A, R-404A, R-407C vb.)
-AR6 bileşen değerlerinden hesaplanarak eklenmiştir.
+AR5 bileşen değerlerinden hesaplanarak eklenmiştir.
 
 METODOLOJİ
 ----------
 GHG Protokolü Kurumsal Standardı • IPCC 2006 (2019 günc.) •
-KIP'ler IPCC AR6 (100 yıl): CH4 fosil 29,8 / N2O 273 •
+KIP'ler IPCC AR5 (100 yıl): CH4 fosil 30 / N2O 265 •
 Kapsam 2 ikili raporlama (Lokasyona + Piyasaya Dayalı) •
 Türkiye şebeke EF'leri: ETKB EVÇED 2023.
 ================================================================
