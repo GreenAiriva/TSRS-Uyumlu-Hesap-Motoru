@@ -81,8 +81,8 @@ VERI.ef_kaynaklari = {
  },
  "ef_elektrik": {
   "ad": "Şebeke Elektriği Emisyon Faktörleri (Kapsam 2)",
-  "kaynak": "Türkiye: T.C. ETKB EVÇED 2023 (dağıtım 0,469 / iletim 0,436 / üretim 0,434 kg CO2e/kWh). UK: DEFRA 2023.",
-  "guncelleme": "2023",
+  "kaynak": "Türkiye: T.C. ETKB EVÇED 2023 (dağıtım 0,469 / iletim 0,436 / üretim 0,434 kg CO2e/kWh). UK: DEFRA 2023. ABD: EPA eGRID 2022 alt-bölge faktörleri (GHG Protokol Cross-Sector Tools V2.0) — lb/MWh (CO2) ve lb/GWh (CH4, N2O) değerleri kg/kWh'e çevrildi (1 lb = 0,45359237 kg); CO2e'ye çevrim AR5 KIP ile hesap anında yapılır.",
+  "guncelleme": "2023 (TR/UK), 2022 (ABD eGRID)",
   "belirsizlik": {
    "CO2": "±5-10% (şebeke karışımı yıllık değişimi)",
    "aktivite": "±1-2% (elektrik faturası/sayaç)"
