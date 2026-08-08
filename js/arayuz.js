@@ -951,6 +951,214 @@ window.UI = (function () {
      - ta   : anlatı metni ([VERİ BEKLENİYOR] — Y4)
      Her metrik kartında TSRS kodu + hangi cilt(ler)de istendiği gösterilir. ============================================================ */
   // Tek bir metrik için giriş satırı üretir (tipine göre)
+  /* ---- Tesis slot tablosu (CG-MR-000.A / 000.B) --------------------------
+     Satırlar organizasyon hiyerarşisinden canlı gelir. Hiyerarşiye tesis
+     eklenirse tabloya düşer; çıkarılırsa sayımdan düşer ve kayıtlı alanı
+     "hesaba katılmadı" notu olarak gösterilir. */
+  var SLOT_SINIF = [
+    ["perakende", "Perakende"], ["dagitim", "Dağıtım"],
+    ["ikisi", "Perakende + Dağıtım"], ["disi", "Kapsam dışı"]
+  ];
+  function tesisSlotTablosu() {
+    if (!(window.Motor && Motor.tesisSlotlari)) return null;
+    var S = Motor.tesisSlotlari();
+    var SOLUK = "var(--soluk,#6E7479)";
+    var CIZGI = "1px solid var(--cizgi,#D9DBD4)";
+    var IZ = "display:grid;grid-template-columns:66px minmax(0,1fr) 158px 86px 86px;gap:0 10px;align-items:center";
+    var kok = el("div", { style: "margin-bottom:14px" }, []);
+
+    kok.appendChild(el("div", { class: "bilgi", style: "margin:0 0 10px;font-size:11.5px" }, [
+      "Satırlar organizasyon hiyerarşisinden geliyor. Yeni tesis eklemek veya çıkarmak için ",
+      el("b", null, ["Organizasyon"]), " sekmesini kullanın — buradaki tablo kendiliğinden güncellenir."
+    ]));
+
+    if (!S.satir.length) {
+      kok.appendChild(el("div", { class: "bos-durum", style: "padding:18px;font-size:12.5px" },
+        ["Organizasyon hiyerarşisinde Showroom / Depo / Ofis türünde tesis kaydı yok."]));
+      return kok;
+    }
+
+    kok.appendChild(el("div", { style: IZ + ";font-size:11px;color:" + SOLUK +
+      ";padding-bottom:6px;border-bottom:" + CIZGI }, [
+      el("span", null, ["Kod"]), el("span", null, ["Tesis"]), el("span", null, ["Sınıf"]),
+      el("span", { style: "text-align:right" }, ["Perakende m²"]),
+      el("span", { style: "text-align:right" }, ["Dağıtım m²"])
+    ]));
+
+    S.satir.forEach(function (s, ix) {
+      var satir = el("div", { style: IZ + ";padding:8px 0" +
+        (ix === S.satir.length - 1 ? "" : ";border-bottom:" + CIZGI) +
+        (s.sinif === "disi" ? ";opacity:.55" : "") }, []);
+
+      satir.appendChild(el("span", { style: "font-size:11px;color:" + SOLUK +
+        ";font-variant-numeric:tabular-nums" }, [s.id]));
+
+      var altBilgi = s.tur + (s.konum ? " · " + s.konum : "");
+      if (s.durum && s.durum !== "Aktif") altBilgi += " · " + s.durum;
+      satir.appendChild(el("div", null, [
+        el("div", { style: "font-size:12.5px" }, [s.ad]),
+        el("div", { style: "font-size:10.5px;color:" + SOLUK }, [altBilgi]),
+        s.oneri === "ikisi" && s.orgNotu
+          ? el("div", { style: "font-size:10.5px;color:#6E5710" }, ["org kaydı: " + s.orgNotu])
+          : null
+      ]));
+
+      var sec = el("select", { style: "font-size:12px" }, SLOT_SINIF.map(function (p) {
+        return el("option", p[0] === s.sinif ? { value: p[0], selected: "selected" } : { value: p[0] }, [p[1]]);
+      }));
+      sec.value = s.sinif;
+      sec.addEventListener("change", function () {
+        Depo.tesisSinifYaz(s.id, "sinif", sec.value);
+        UI.bildir("Kaydedildi"); UI.ciz();
+      });
+      satir.appendChild(sec);
+
+      function alanGirdi(alan, aktif, deger) {
+        var g = el("input", { type: "number", step: "any", inputMode: "decimal",
+          value: deger != null ? deger : "", placeholder: aktif ? "m²" : "—",
+          style: "text-align:right;font-size:12px" });
+        if (!aktif) { g.disabled = true; return g; }
+        g.addEventListener("input", function () { Depo.tesisSinifYaz(s.id, alan, g.value); });
+        g.addEventListener("change", function () { UI.bildir("Kaydedildi"); UI.navGuncelle(); });
+        return g;
+      }
+      var p = s.sinif === "perakende" || s.sinif === "ikisi";
+      var d = s.sinif === "dagitim"   || s.sinif === "ikisi";
+      satir.appendChild(alanGirdi("m2p", p, s.m2p));
+      satir.appendChild(alanGirdi("m2d", d, s.m2d));
+      kok.appendChild(satir);
+    });
+
+    var t = S.toplam;
+    kok.appendChild(el("div", { style: IZ + ";padding:9px 0;border-top:2px solid var(--cizgi,#D9DBD4);" +
+      "font-weight:600;font-size:12.5px" }, [
+      el("span", null, [""]),
+      el("span", { style: "font-weight:400;color:" + SOLUK + ";font-size:11.5px" },
+        ["Kapsamda " + t.kapsamda + " tesis · perakende " + t.perakendeSayi + " · dağıtım " + t.dagitimSayi]),
+      el("span", null, [""]),
+      el("span", { style: "text-align:right;font-variant-numeric:tabular-nums" }, [Motor.fmt(t.perakendeM2, 0)]),
+      el("span", { style: "text-align:right;font-variant-numeric:tabular-nums" }, [Motor.fmt(t.dagitimM2, 0)])
+    ]));
+
+    if (t.m2Eksik)
+      kok.appendChild(el("div", { class: "bilgi", style: "margin:9px 0 0;font-size:11.5px" },
+        [t.m2Eksik + " tesiste alan verisi girilmemiş — CG-MR-000.B eksik kalır."]));
+
+    S.yetim.forEach(function (y) {
+      kok.appendChild(el("div", { class: "bilgi", style: "margin:9px 0 0;font-size:11.5px;" +
+        "background:#F8E8E4;border-color:#EBCFC7;border-left-color:var(--oksit,#A03E1E);color:#6B2E19" }, [
+        y.id + " organizasyon hiyerarşisinde bulunmuyor; kayıtlı alan verisi (" +
+          Motor.fmt((y.m2p || 0) + (y.m2d || 0), 0) + " m²) hesaba katılmadı. ",
+        el("button", { class: "btn kucuk", type: "button", style: "margin-left:6px",
+          onclick: function () {
+            delete Depo.tesisSinif()[y.id]; Depo.kaydet(true);
+            UI.bildir("Kayıt temizlendi"); UI.ciz();
+          } }, ["Kaydı temizle"])
+      ]));
+    });
+    return kok;
+  }
+
+  /* ---- Bileşen satırlı giriş alanı (Cilt 6 ve 8) ------------------------
+     sektor_ciltleri.js -> bilesen[]. Motor bileşenleri kilitli ve canlı
+     hesaplanır (saklanmaz); manuel bileşenler kanıt + gerekçe ister.
+     Saklama anahtarları: bilesen_<no>, bilesen_<no>_kanit, bilesen_<no>_gerekce */
+  function bilesenAlani(m, v) {
+    var coz = (window.Motor && Motor.metrikBilesenleri) ? Motor.metrikBilesenleri(m) : null;
+    if (!coz || !coz.length) return null;
+    var IZGARA = "display:grid;grid-template-columns:26px minmax(0,1fr) 142px 78px;gap:0 8px;align-items:center";
+    var CIZGI = "1px solid var(--cizgi,#D9DBD4)";
+    var SOLUK = "var(--soluk,#6E7479)";
+    var kok = el("div", null, []);
+
+    // Slot tablolu metrikler: tesis satırları bileşenlerin ÜSTÜNDE
+    if (m.slot === "tesis") {
+      var tablo = tesisSlotTablosu();
+      if (tablo) kok.appendChild(tablo);
+    }
+
+    // Ortak metrikte bileşen listesi başka cildin tanımından gelmiş olabilir
+    if (m.bilesenKaynagiKod && m.bilesenKaynagiKod !== m.kod) {
+      kok.appendChild(el("div", { style: "font-size:11px;color:" + SOLUK + ";margin:0 0 8px" },
+        ["Bileşen listesi " + m.bilesenKaynagiKod + " tanımından alındı (ciltler arasında kapsayan liste)."]));
+    }
+
+    // Donmuş "Motordan al" kopyası uyarısı
+    var ilkMotor = null, i;
+    for (i = 0; i < coz.length; i++)
+      if (coz[i].kaynak === "motor" && coz[i].motorDeger != null) { ilkMotor = coz[i]; break; }
+    var eski = Motor.sayi(v.deger);
+    if (ilkMotor && eski > 0 && ilkMotor.motorDeger > 0 &&
+        Math.abs(eski - ilkMotor.motorDeger) / ilkMotor.motorDeger > 0.01) {
+      kok.appendChild(el("div", { class: "bilgi", style: "margin:0 0 10px;font-size:12px;" +
+        "background:#F8E8E4;border-color:#EBCFC7;border-left-color:var(--oksit,#A03E1E);color:#6B2E19" }, [
+        el("b", null, ["Donmuş kopya: "]),
+        "kayıtlı " + Motor.fmt(eski, 2) + ", canlı motor değeri " +
+          Motor.fmt(ilkMotor.motorDeger, 2) + " " + (ilkMotor.birim || "") + " (%" +
+          Motor.fmt(Math.abs(ilkMotor.motorDeger - eski) / eski * 100, 1) + " sapma). ",
+        "Eski “Motordan al” kopyası artık kullanılmıyor; bileşenler her açılışta yeniden hesaplanır. ",
+        el("button", { class: "btn kucuk", type: "button", style: "margin-left:6px",
+          onclick: function () { Depo.metrikYaz(m.kod, "deger", ""); UI.bildir("Kopya temizlendi"); UI.ciz(); } },
+          ["Kopyayı temizle"])
+      ]));
+    }
+
+    kok.appendChild(el("div", { style: IZGARA + ";font-size:11px;color:" + SOLUK +
+      ";padding-bottom:5px;border-bottom:" + CIZGI }, [
+      el("span", null, [""]), el("span", null, ["Bileşen"]),
+      el("span", { style: "text-align:right" }, ["Değer"]),
+      el("span", { style: "text-align:right" }, ["Kaynak"])
+    ]));
+
+    coz.forEach(function (b, ix) {
+      var son = ix === coz.length - 1;
+      var satir = el("div", { style: IZGARA + ";padding:9px 0" + (son ? "" : ";border-bottom:" + CIZGI) }, []);
+      satir.appendChild(el("span", { style: "font-size:11px;color:" + SOLUK }, [String(b.no)]));
+      satir.appendChild(el("span", { style: "font-size:13px" }, [b.ad]));
+
+      var alt = [];
+      if (b.kaynak === "motor") {
+        satir.appendChild(el("span", { style: "text-align:right;font-size:14px;font-weight:600;" +
+          "font-variant-numeric:tabular-nums" },
+          [b.motorDeger == null ? "—" : Motor.fmt(b.motorDeger, 2) + (b.yuzde ? " %" : "")]));
+        satir.appendChild(el("span", { style: "text-align:right;font-size:11px;color:" + SOLUK }, ["kilitli · motor"]));
+        if (b.motorKaynak) alt.push(el("div", { style: "font-size:11px;color:" + SOLUK + ";padding-top:3px" }, [b.motorKaynak]));
+      } else {
+        var ak = "bilesen_" + b.no;
+        var g = el("input", { type: "number", step: "any", inputMode: "decimal",
+          value: v[ak] != null ? v[ak] : "", placeholder: b.birim || "", style: "text-align:right" });
+        g.addEventListener("input", function () { Depo.metrikYaz(m.kod, ak, g.value); });
+        g.addEventListener("change", function () { UI.bildir("Kaydedildi"); UI.navGuncelle(); });
+        satir.appendChild(g);
+        satir.appendChild(el("span", { style: "text-align:right;font-size:11px;color:" + SOLUK }, ["manuel"]));
+
+        var kanit = el("input", { type: "text", value: v[ak + "_kanit"] || "",
+          placeholder: "Kanıt bağlantısı / belge no" });
+        kanit.addEventListener("input", function () { Depo.metrikYaz(m.kod, ak + "_kanit", kanit.value); });
+        var ger = el("input", { type: "text", value: v[ak + "_gerekce"] || "",
+          placeholder: "Gerekçe / yöntem" });
+        ger.addEventListener("input", function () { Depo.metrikYaz(m.kod, ak + "_gerekce", ger.value); });
+        alt.push(el("div", { style: "display:flex;gap:8px;padding-top:7px" }, [kanit, ger]));
+
+        if (v[ak] != null && String(v[ak]).trim() !== "" && !String(v[ak + "_kanit"] || "").trim())
+          alt.push(el("div", { style: "font-size:11px;color:var(--oksit,#A03E1E);padding-top:4px" },
+            ["Değer girildi ama kanıt bağlantısı boş — güvence denetiminde dayanaksız kalır."]));
+      }
+      if (b.eksik)         alt.push(el("div", { style: "font-size:11px;color:#6E5710;padding-top:4px" }, ["Eksik: " + b.eksik]));
+      if (b.kapsamUyarisi) alt.push(el("div", { style: "font-size:11px;color:#6E5710;padding-top:4px" }, ["Kapsam: " + b.kapsamUyarisi]));
+      if (b.not)           alt.push(el("div", { style: "font-size:11px;color:" + SOLUK + ";padding-top:4px" }, [b.not]));
+
+      if (alt.length) {
+        satir.appendChild(el("span", null, []));
+        satir.appendChild(el("div", { style: "grid-column:2/-1" }, alt));
+      }
+      kok.appendChild(satir);
+    });
+
+    if (m.not) kok.appendChild(el("div", { class: "bilgi", style: "margin:12px 0 0;font-size:11.5px" }, [m.not]));
+    return kok;
+  }
+
   function metrikSatiri(m) {
     var na = Depo.naMetrikler().indexOf(m.kod) > -1;
     var v = Depo.metrikVeri(m.kod);
@@ -972,9 +1180,10 @@ window.UI = (function () {
       ta:    el("span", { class: "rozet", style: "background:#8A7A5C;color:#fff;font-size:10px" }, ["anlatı"])
     })[m.tip];
 
-    // Giriş alanı (tipe göre)
-    var girisAlani;
-    if (m.tip === "ta") {
+    // Giriş alanı: bileşenli metrikler (Cilt 6 ve 8) yeni kart, diğerleri eski yol
+    var girisAlani = (m.bilesen && m.bilesen.length) ? bilesenAlani(m, v) : null;
+    if (girisAlani) { /* bileşen kartı kuruldu */ }
+    else if (m.tip === "ta") {
       var ta = el("textarea", { rows: "3", value: v.metin || "",
         placeholder: "[VERİ BEKLENİYOR: " + m.kod + "] — müşteriden gelecek açıklama metni buraya" });
       ta.addEventListener("input", function () { Depo.metrikYaz(m.kod, "metin", ta.value); });
@@ -1231,7 +1440,7 @@ window.UI = (function () {
   }
 
   function faaliyetFormu(kayit, bittiginde) {
-    var s = Object.assign({ bolge: "Other1", veriKalite: "", manuelEF: "" }, kayit || {});
+    var s = Object.assign({ bolge: "Other1", veriKalite: "", manuelEF: "", isilDegerEsasi: "" }, kayit || {});
     var govde = el("div");
     var izgara = el("div", { class: "form-izgara" });
     var onizleme = el("div", { class: "bilgi", style: "margin:16px 0 0" });
@@ -1246,6 +1455,17 @@ window.UI = (function () {
     var aKaynak = UI.alan({ anahtar: "kaynak", etiket: "Yakıt / Araç Tipi", tip: "secim", liste: [], zorunlu: true, genis: true });
     var aMiktar = UI.alan({ anahtar: "miktar", etiket: "Miktar", tip: "sayi", zorunlu: true, deger: s.miktar });
     var aBirim = UI.alan({ anahtar: "birim", etiket: "Birim", tip: "secim", liste: [], deger: s.birim });
+    /* Isıl değer esası — yalnızca sabit yanmada ve enerji birimlerinde (GJ/kWh/MWh) görünür.
+       Kütle/hacim girişinde esas EF setinden gelir (NCV), seçim anlamsızdır. */
+    var aIsilEsas = UI.alan({ anahtar: "isilDegerEsasi", etiket: "Isıl Değer Esası", tip: "secim", liste: [],
+      yardim: "Girilen enerji miktarı hangi ısıl değerle hesaplandı? Emisyon faktörleri (IPCC 2006) **alt** ısıl değer (NCV) esaslıdır. " +
+              "Türkiye'de doğal gaz faturasındaki kWh, EPDK faturalandırma esaslarına göre **üst** ısıl değerlidir (GCV) — bu durumda GCV seçin, " +
+              "motor emisyon hesabında NCV'ye indirir. Boş bırakılırsa NCV varsayılır." });
+    aIsilEsas.girdi.innerHTML = "";
+    aIsilEsas.girdi.appendChild(el("option", { value: "" }, ["— Seçin (boşsa NCV varsayılır) —"]));
+    aIsilEsas.girdi.appendChild(el("option", { value: "NCV" }, ["NCV — alt ısıl değer (EF setiyle aynı esas)"]));
+    aIsilEsas.girdi.appendChild(el("option", { value: "GCV" }, ["GCV — üst ısıl değer (ör. doğal gaz faturası kWh)"]));
+    if (s.isilDegerEsasi) aIsilEsas.girdi.value = s.isilDegerEsasi;
     var aManuel = UI.alan({ anahtar: "manuelEF", etiket: "Manuel EF (kg CO2e/birim)", tip: "sayi", deger: s.manuelEF,
       yardim: "Doluysa tablo yerine bu değer kullanılır" });
     var aKalite = UI.alan({ anahtar: "veriKalite", etiket: "Veri Kalitesi", tip: "secim", liste: "veri_kalitesi", deger: s.veriKalite });
@@ -1292,6 +1512,19 @@ window.UI = (function () {
         }
       }
     }
+    var ENERJI_BIRIMI = { "gj": 1, "kwh": 1, "mwh": 1 };
+    function isilEsasGoster() {
+      var b = String(aBirim.girdi.value || "").toLowerCase();
+      var gerekli = aKategori.girdi.value === "Sabit Yanma" && !!ENERJI_BIRIMI[b];
+      aIsilEsas.style.display = gerekli ? "" : "none";
+      if (!gerekli) { aIsilEsas.girdi.value = ""; UI.alanHata(aIsilEsas, ""); return; }
+      // Gaz yakıt tespiti EF setinden türetilir (gaz 1,111111 / katı-sıvı 1,052632) — yakıt adı listesine bağlı değil
+      var kyt = Motor.kaynakKaydi("Sabit Yanma", null, aKaynak.girdi.value);
+      var gazMi = !!kyt && Motor.sayi(kyt.LHV_to_HHV_factor) >= 1.11;
+      UI.alanHata(aIsilEsas, (gazMi && b === "kwh" && aIsilEsas.girdi.value !== "GCV")
+        ? "Türkiye'de doğal gaz faturasındaki kWh üst ısıl değerle hesaplanır (EPDK). Bu kayıt için GCV seçilmeli; aksi halde emisyon yaklaşık %11 fazla çıkar."
+        : "");
+    }
     function onizle() {
       var v = UI.degerler(izgara);
       var h = Motor.hesapFaaliyet(v);
@@ -1306,17 +1539,20 @@ window.UI = (function () {
           " kg • N2O: " + Motor.fmt(h.n2okg, 3) + " kg<br><span style='font-size:11.5px'>" + UI.kacir(h.aciklama) + "</span>";
       }
     }
-    aKategori.girdi.addEventListener("change", function () { kaynakDoldur(); birimDoldur(); onizle(); });
-    aBolge.girdi.addEventListener("change", function () { kaynakDoldur(); onizle(); });
-    [aKaynak, aMiktar, aBirim, aManuel].forEach(function (a) {
+    aKategori.girdi.addEventListener("change", function () { kaynakDoldur(); birimDoldur(); isilEsasGoster(); onizle(); });
+    aBolge.girdi.addEventListener("change", function () { kaynakDoldur(); isilEsasGoster(); onizle(); });
+    [aKaynak, aBirim, aIsilEsas].forEach(function (a) {
+      a.girdi.addEventListener("change", isilEsasGoster);
+    });
+    [aKaynak, aMiktar, aBirim, aManuel, aIsilEsas].forEach(function (a) {
       a.girdi.addEventListener("change", onizle);
       a.girdi.addEventListener("input", onizle);
     });
 
-    [aNo, aBirimSec, aTesis, aKategori, aBolge, aKaynak, aMiktar, aBirim, aManuel, aKalite, aDonem, aNot]
+    [aNo, aBirimSec, aTesis, aKategori, aBolge, aKaynak, aMiktar, aBirim, aIsilEsas, aManuel, aKalite, aDonem, aNot]
       .forEach(function (a) { izgara.appendChild(a); });
     govde.appendChild(izgara); govde.appendChild(onizleme);
-    kaynakDoldur(); birimDoldur(); onizle();
+    kaynakDoldur(); birimDoldur(); isilEsasGoster(); onizle();
 
     UI.modal(kayit ? "Kaydı Düzenle — " + (kayit.no || "") : "Yeni Faaliyet Kaydı", govde, [
       { etiket: "Vazgeç" },
