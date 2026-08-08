@@ -635,17 +635,36 @@ window.Depo = (function () {
           if (!ortakHarita[m.ortak]) {
             var yeni = {
               kod: m.kod, ad: m.ad, tip: m.tip, birim: m.birim || "",
-              kapsam: m.kapsam || null, ortak: m.ortak, ciltler: [ciltBilgi]
+              kapsam: m.kapsam || null, ortak: m.ortak, ciltler: [ciltBilgi],
+              bilesen: m.bilesen || null, bilesenTipi: m.bilesenTipi || null,
+              satirSemasi: m.satirSemasi || null, not: m.not || null, slot: m.slot || null,
+              bilesenKaynagiKod: m.bilesen ? m.kod : null
             };
             ortakHarita[m.ortak] = yeni;
             sonuc.push(yeni);
           } else {
-            ortakHarita[m.ortak].ciltler.push(ciltBilgi);
+            var v = ortakHarita[m.ortak];
+            v.ciltler.push(ciltBilgi);
+            /* Ortak metrikte ciltlerin bileşen sayısı farklı olabilir (ör. CG-MR-130a.1
+               3 bileşen, EM-CM-130a.1 4 bileşen — fazlası "alternatif enerji %").
+               Kapsayan (en çok bileşenli) listeyi alırız; aksi halde ilk cildin listesi
+               kazanır ve diğer cildin istediği bileşen sessizce düşer. */
+            if (m.bilesen && (!v.bilesen || m.bilesen.length > v.bilesen.length)) {
+              v.bilesen = m.bilesen;
+              v.bilesenKaynagiKod = m.kod;
+              if (m.birim) v.birim = m.birim;
+            }
+            if (!v.slot && m.slot) v.slot = m.slot;
+            if (!v.bilesenTipi && m.bilesenTipi) v.bilesenTipi = m.bilesenTipi;
+            if (!v.satirSemasi && m.satirSemasi) v.satirSemasi = m.satirSemasi;
           }
         } else {
           sonuc.push({
             kod: m.kod, ad: m.ad, tip: m.tip, birim: m.birim || "",
-            kapsam: m.kapsam || null, ortak: null, ciltler: [ciltBilgi]
+            kapsam: m.kapsam || null, ortak: null, ciltler: [ciltBilgi],
+            bilesen: m.bilesen || null, bilesenTipi: m.bilesenTipi || null,
+            satirSemasi: m.satirSemasi || null, not: m.not || null, slot: m.slot || null,
+            bilesenKaynagiKod: m.bilesen ? m.kod : null
           });
         }
       });
@@ -668,6 +687,19 @@ window.Depo = (function () {
     if (!d.veri.sektorMetrik[kod]) d.veri.sektorMetrik[kod] = {};
     return d.veri.sektorMetrik[kod];
   };
+  /* ---- Tesis sınıflandırması (CG-MR-000.A / 000.B slot tablosu) ----
+     Anahtar organizasyon hiyerarşisindeki tesis id'sidir (TES-xx).
+     Yalnızca sınıf ve alan saklanır; ad/konum/tür daima indeks.org'dan okunur. */
+  d.tesisSinif = function () {
+    if (!d.veri.tesisSinif) d.veri.tesisSinif = {};
+    return d.veri.tesisSinif;
+  };
+  d.tesisSinifYaz = function (id, alan, deger) {
+    var t = d.tesisSinif();
+    if (!t[id]) t[id] = {};
+    t[id][alan] = deger;
+    d.kaydet(true);
+  };
   d.metrikYaz = function (kod, alan, deger) {
     var v = d.metrikVeri(kod);
     v[alan] = deger;
@@ -678,6 +710,30 @@ window.Depo = (function () {
     var v = (d.veri.sektorMetrik && d.veri.sektorMetrik[metrik.kod]) || {};
     if (metrik.tip === "ta") {
       return (v.metin && String(v.metin).trim()) ? "tam" : "bos";
+    }
+    /* Bileşenli metrik (Cilt 6 ve 8): durum bileşen bazında belirlenir.
+       Motor bileşenleri her zaman dolu sayılır (canlı hesaplanır, saklanmaz).
+       Manuel bileşenler "bilesen_<no>" anahtarında saklanır. */
+    /* Slot tablolu metrik (tesis bazlı): kapsamda tesis yoksa boş,
+       alan verisi eksikse kısmi. Sayım metriği alan istemez. */
+    if (metrik.slot === "tesis" && window.Motor && Motor.tesisSlotlari) {
+      var S = Motor.tesisSlotlari().toplam;
+      if (!S.kapsamda) return "bos";
+      var alanIster = (metrik.bilesen || []).some(function (b) { return b.birim === "m²"; });
+      if (!alanIster) return "tam";
+      return S.m2Eksik ? "kismi" : "tam";
+    }
+    if (metrik.bilesen && metrik.bilesen.length) {
+      var manuel = 0, girili = 0;
+      metrik.bilesen.forEach(function (b) {
+        if (b.kaynak === "motor") return;
+        manuel++;
+        var x = v["bilesen_" + b.no];
+        if (x != null && String(x).trim() !== "") girili++;
+      });
+      if (manuel === 0) return "tam";
+      if (girili === 0) return "bos";
+      return girili === manuel ? "tam" : "kismi";
     }
     // hesap/veri: deger alanı dolu mu
     var dolu = v.deger != null && String(v.deger).trim() !== "";

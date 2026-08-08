@@ -226,6 +226,14 @@ window.Motor = (function () {
                        (biyoCo2kg ? " • biyojenik CO2 ayrı izlenir" : ""), hata: null };
   };
 
+  /* Cilt 8 EM-CM-130a.1 md. 3: "alternatif enerji" = atık türevli yakıtlar
+     (kullanılmış lastik, atık yağ/çözücü, işlenmiş belediye ve evsel atık,
+     tarımsal atık, hayvan yemi, kanalizasyon çamuru). */
+  var ALTERNATIF_YAKIT = {
+    "Municipal waste (Non biomass fraction)": 1, "Municipal wastes (Biomass fraction)": 1,
+    "Industrial wastes": 1, "Waste oils": 1, "Sludge gas": 1, "Landfill gas": 1, "Other biogas": 1
+  };
+
   /* Sabit yanma: IPCC 2006 — kütle (t/kg), hacim (L/m³) veya enerji (GJ/kWh/MWh) */
   function hesapSabit(s, miktar) {
     var bos = { tco2e: 0, co2kg: 0, ch4kg: 0, n2okg: 0, biyoCo2kg: 0, aciklama: "", hata: null };
@@ -252,10 +260,29 @@ window.Motor = (function () {
     else return Object.assign(bos, { hata: "Desteklenmeyen birim: " + s.birim });
 
     var ncv = sayi(kayit.NCV_TJ_per_Gg); // TJ / 1000 tonne
+    /* ---- Isıl değer esası (İP-1 / D-2) ------------------------------------
+       EF seti (IPCC 2006) ALT ısıl değer (NCV) esaslıdır. TSRS 2 Ek Cilt 8
+       md. EM-CM-130a.1 (1.3) enerji tüketimini ÜST ısıl değerle (GCV) ister.
+       Emisyon DAİMA tjNcv ile hesaplanır; enerji metriği tjGcv kullanır.
+       • Kütle/hacim girişinde esas EF setinden gelir (NCV); alan yok sayılır.
+       • Enerji birimi girişinde s.isilDegerEsasi belirler. Alan yoksa
+         varsayılan "NCV" — mevcut kayıtların sonucu değişmez.
+       Örn. Türkiye doğal gaz faturasındaki kWh, EPDK faturalandırma
+       esaslarına göre üst ısıl değerlidir; "GCV" işaretlenir. ---------------- */
+    var hhvF = sayi(kayit.LHV_to_HHV_factor) || null;
+    var esas = (tj != null && String(s.isilDegerEsasi || "NCV").toUpperCase() === "GCV") ? "GCV" : "NCV";
+    var tjNcv = null, tjGcv = null;
     if (tj == null) {
       if (!ncv) return Object.assign(bos, { hata: "NCV tanımlı değil; enerji birimi (GJ/kWh) kullanın" });
-      tj = ton * ncv / 1000;
+      tjNcv = ton * ncv / 1000;
+    } else if (esas === "GCV") {
+      if (!hhvF) return Object.assign(bos, { hata: "Bu yakıt için LHV_to_HHV_factor tanımlı değil; GCV esası NCV'ye çevrilemiyor" });
+      tjNcv = tj / hhvF;
+    } else {
+      tjNcv = tj;
     }
+    tjGcv = hhvF ? tjNcv * hhvF : null;
+    tj = tjNcv; // emisyon hesabı NCV esaslı EF ile çalışır
     var co2kg = tj * sayi(kayit.CO2_kg_per_TJ);
     var ch4kg = tj * sayi(kayit.CH4_kg_per_TJ);
     var n2okg = tj * sayi(kayit.N2O_kg_per_TJ);
@@ -268,8 +295,16 @@ window.Motor = (function () {
       biyoCo2kg = co2kg; co2kg = 0;
     }
     var tco2e = (co2kg + ch4kg * M.gwpCH4() + n2okg * M.gwpN2O()) / 1000;
-    return { tco2e: tco2e, co2kg: co2kg, ch4kg: ch4kg, n2okg: n2okg, biyoCo2kg: biyoCo2kg, enerjiGJ: tj * 1000,
-             aciklama: "IPCC 2006 — NCV " + ncv + " TJ/Gg" + (biyoCo2kg ? " • biyojenik CO2 ayrı izlenir" : ""), hata: null };
+    return { tco2e: tco2e, co2kg: co2kg, ch4kg: ch4kg, n2okg: n2okg, biyoCo2kg: biyoCo2kg,
+             enerjiGJ: tjNcv * 1000,                                   // NCV — emisyonla tutarlı
+             enerjiGJ_gcv: tjGcv != null ? tjGcv * 1000 : null,        // GCV — TSRS enerji metriği
+             isilDegerEsasi: esas,
+             // Cilt 8 md. 4.3.1: biyokütle yenilenebilir; turba IPCC'de fosil sayılır
+             yenilenebilirMi: (kayit.Category || "") === "Biomass" && kayit.Fuel_Name !== "Peat",
+             alternatifMi: !!ALTERNATIF_YAKIT[kayit.Fuel_Name],
+             aciklama: "IPCC 2006 — NCV esaslı EF" + (ncv ? " (NCV " + ncv + " TJ/Gg)" : "") +
+                       (esas === "GCV" ? " • girdi GCV; " + (1 / hhvF).toFixed(4) + " ile NCV'ye indirildi" : "") +
+                       (biyoCo2kg ? " • biyojenik CO2 ayrı izlenir" : ""), hata: null };
   }
 
   /* ============================================================
@@ -390,7 +425,8 @@ window.Motor = (function () {
       k3: { yukYukari: 0, yukAsagi: 0, seyahat: 0, ulasim: 0, diger: 0, toplam: 0 },
       gaz: { co2kg: 0, ch4kg: 0, n2okg: 0, fgazkg: 0, fgazTco2e: 0 },
       biyojenik: { co2kg: 0, tco2: 0 },   // kapsam DIŞI, ayrı raporlanır
-      enerji: { yakitGJ: 0, elektrikGJ: 0, toplamGJ: 0 },
+      enerji: { yakitGJ: 0, yakitGJ_gcv: 0, elektrikGJ: 0, toplamGJ: 0, toplamGJ_gcv: 0, gcvEksik: 0,
+                yenilenebilirYakitGJ_gcv: 0, alternatifYakitGJ_gcv: 0 },
       hatalar: []
     };
     v.faaliyet.forEach(function (s) {
@@ -399,7 +435,15 @@ window.Motor = (function () {
       T.gaz.co2kg += h.co2kg; T.gaz.ch4kg += h.ch4kg; T.gaz.n2okg += h.n2okg;
       T.biyojenik.co2kg += sayi(h.biyoCo2kg);
       var kat = s.kategori;
-      if (kat === "Sabit Yanma") { T.k1.sabit += h.tco2e; if (h.enerjiGJ) T.enerji.yakitGJ += h.enerjiGJ; }
+      if (kat === "Sabit Yanma") {
+        T.k1.sabit += h.tco2e;
+        if (h.enerjiGJ) T.enerji.yakitGJ += h.enerjiGJ;
+        if (h.enerjiGJ_gcv != null) {
+          T.enerji.yakitGJ_gcv += h.enerjiGJ_gcv;
+          if (h.yenilenebilirMi) T.enerji.yenilenebilirYakitGJ_gcv += h.enerjiGJ_gcv;
+          if (h.alternatifMi)    T.enerji.alternatifYakitGJ_gcv    += h.enerjiGJ_gcv;
+        } else if (h.enerjiGJ) T.enerji.gcvEksik += 1;   // GCV çevrimi yapılamayan kayıt
+      }
       else if (kat === "Mobil Yanma - Yakıt" || kat === "Mobil Yanma - Mesafe") T.k1.mobil += h.tco2e;
       else if (kat === "Proses Emisyonları") T.k1.proses += h.tco2e;
       else if (kat === "Satın Alınan Isı/Buhar") T.k2.isi += h.tco2e;
@@ -430,8 +474,9 @@ window.Motor = (function () {
     T.yogunlukFTE = fte > 0 ? T.toplamLD / fte : 0;
     T.yogunlukHasilat = hasilat > 0 ? T.toplamLD / hasilat : 0;
     // Toplam enerji: sabit yanma yakıt enerjisi + elektrik tüketimi (kWh→GJ)
-    T.enerji.elektrikGJ = T.k2.kwh * 0.0036;
-    T.enerji.toplamGJ = T.enerji.yakitGJ + T.enerji.elektrikGJ;
+    T.enerji.elektrikGJ = T.k2.kwh * 0.0036;   // elektrikte ısıl değer esası yok
+    T.enerji.toplamGJ = T.enerji.yakitGJ + T.enerji.elektrikGJ;             // NCV esaslı
+    T.enerji.toplamGJ_gcv = T.enerji.yakitGJ_gcv + T.enerji.elektrikGJ;     // GCV esaslı (TSRS)
     return T;
   };
 
@@ -610,6 +655,141 @@ window.Motor = (function () {
       default:
         return null;
     }
+  };
+
+  /* ---- TESİS SLOTLARI (CG-MR-000.A / 000.B) ------------------------------
+     Satırlar organizasyon hiyerarşisinden (indeks.org) CANLI türetilir; anlık
+     görüntü alınmaz. Hiyerarşiye eklenen tesis tabloya düşer, çıkarılan
+     sayımdan düşer. data.tesisSinif yalnızca sınıf ve alan tutar — tesisin
+     adı, konumu ve türü hiçbir zaman kopyalanmaz.
+     sinif: "perakende" | "dagitim" | "ikisi" | "disi" */
+  var SLOT_TUR_ONERI = { "Showroom": "perakende", "Depo": "dagitim",
+                         "Ofis": "disi", "Ocak": "disi", "Tesis": "disi" };
+
+  M.tesisSlotlari = function () {
+    var org = (Depo.veri && Depo.veri.indeks && Depo.veri.indeks.org) || [];
+    var kayitli = (Depo.veri && Depo.veri.tesisSinif) || {};
+    var satir = [], gorulen = {};
+    org.forEach(function (o) {
+      var tur = o.tur || "";
+      if (!SLOT_TUR_ONERI.hasOwnProperty(tur)) return;  // Grup/İştirak tüzel kişidir, slot değil
+      var id = o.id; if (!id) return;
+      gorulen[id] = 1;
+      var k = kayitli[id] || {};
+      // Org kaydında "DEPO+SHOWROOM" geçiyorsa öneri "ikisi"
+      var fa = String(o.faaliyetTuru || "").toUpperCase();
+      var oneri = SLOT_TUR_ONERI[tur];
+      if (fa.indexOf("SHOWROOM") > -1 && fa.indexOf("DEPO") > -1) oneri = "ikisi";
+      satir.push({
+        id: id, ad: o.ad || id, konum: o.konum || "", tur: tur,
+        ustId: o.ustId || "", durum: o.durum || "", orgNotu: o.faaliyetTuru || "",
+        oneri: oneri,
+        sinif: k.sinif || oneri,
+        m2p: sayi(k.m2p) || null,
+        m2d: sayi(k.m2d) || null,
+        kanit: k.kanit || ""
+      });
+    });
+    // Hiyerarşide artık bulunmayan ama kaydı duran tesisler (sessizce düşmesin)
+    var yetim = [];
+    Object.keys(kayitli).forEach(function (id) {
+      if (gorulen[id]) return;
+      var k = kayitli[id] || {};
+      if (!k.sinif && !sayi(k.m2p) && !sayi(k.m2d)) return;
+      yetim.push({ id: id, sinif: k.sinif || "", m2p: sayi(k.m2p) || null, m2d: sayi(k.m2d) || null });
+    });
+    var t = { perakendeSayi: 0, dagitimSayi: 0, perakendeM2: 0, dagitimM2: 0,
+              m2Eksik: 0, kapsamda: 0, perakendeAd: [], dagitimAd: [] };
+    satir.forEach(function (s) {
+      var p = s.sinif === "perakende" || s.sinif === "ikisi";
+      var d = s.sinif === "dagitim"   || s.sinif === "ikisi";
+      if (!p && !d) return;
+      t.kapsamda++;
+      var eksik = false;
+      if (p) { t.perakendeSayi++; t.perakendeAd.push(s.id); if (s.m2p) t.perakendeM2 += s.m2p; else eksik = true; }
+      if (d) { t.dagitimSayi++;   t.dagitimAd.push(s.id);   if (s.m2d) t.dagitimM2   += s.m2d; else eksik = true; }
+      if (eksik) t.m2Eksik++;
+    });
+    return { satir: satir, yetim: yetim, toplam: t };
+  };
+
+  /* ---- BİLEŞEN ÇÖZÜCÜ (sektor_ciltleri.js -> bilesen[].motorAnahtar) ----
+     Bir bileşenin motor değerini döner: { deger, birim, kaynak, eksik }
+     "eksik" doluysa değer güvenilmez sayılır ve arayüz uyarı basar.
+     Emisyon NCV, enerji metrikleri GCV esaslıdır (İP-1 / D-2). */
+  M.bilesenDegeri = function (anahtar) {
+    if (!anahtar) return null;
+    var T = M.toplamlar(), E = T.enerji;
+    var top = E.toplamGJ_gcv;
+    function yuzde(pay, etiket) {
+      if (!(top > 0)) return { deger: null, birim: "%", kaynak: "Toplam enerji sıfır", eksik: "Payda yok" };
+      return { deger: pay / top * 100, birim: "%",
+               kaynak: etiket + " " + M.fmt(pay, 2) + " / toplam " + M.fmt(top, 2) + " GJ" };
+    }
+    switch (anahtar) {
+      case "tesis.perakendeSayi": case "tesis.dagitimSayi":
+      case "tesis.perakendeM2":   case "tesis.dagitimM2": {
+        var S = M.tesisSlotlari(), tt = S.toplam;
+        var yetimNot = S.yetim.length
+          ? " • " + S.yetim.length + " tesis hiyerarşide yok, hesaba katılmadı (" +
+            S.yetim.map(function (y) { return y.id; }).join(", ") + ")"
+          : "";
+        if (anahtar === "tesis.perakendeSayi")
+          return { deger: tt.perakendeSayi, birim: "sayı",
+                   kaynak: "Hiyerarşiden: " + (tt.perakendeAd.join(", ") || "kayıt yok") + yetimNot };
+        if (anahtar === "tesis.dagitimSayi")
+          return { deger: tt.dagitimSayi, birim: "sayı",
+                   kaynak: "Hiyerarşiden: " + (tt.dagitimAd.join(", ") || "kayıt yok") + yetimNot };
+        if (anahtar === "tesis.perakendeM2")
+          return { deger: tt.perakendeM2 || null, birim: "m²",
+                   kaynak: tt.perakendeSayi + " perakende tesisin alan toplamı" + yetimNot,
+                   eksik: tt.m2Eksik ? (tt.m2Eksik + " tesiste alan verisi girilmemiş") : null };
+        return { deger: tt.dagitimM2 || null, birim: "m²",
+                 kaynak: tt.dagitimSayi + " dağıtım tesisinin alan toplamı" + yetimNot,
+                 eksik: tt.m2Eksik ? (tt.m2Eksik + " tesiste alan verisi girilmemiş") : null };
+      }
+      case "k1.toplam":
+        return { deger: T.k1.toplam, birim: "tCO2e",
+                 kaynak: "Sabit " + M.fmt(T.k1.sabit, 2) + " + mobil " + M.fmt(T.k1.mobil, 2) +
+                         " + proses " + M.fmt(T.k1.proses, 2) + " + kaçak " + M.fmt(T.k1.kacak, 2) };
+      case "k1.kacak":
+        return { deger: T.k1.kacak, birim: "tCO2e", kaynak: "Soğutucu/kaçak gaz kayıtları" };
+      case "enerji.toplamGJ_gcv":
+        return { deger: E.toplamGJ_gcv, birim: "GJ",
+                 kaynak: "Yakıt " + M.fmt(E.yakitGJ_gcv, 2) + " + elektrik " + M.fmt(E.elektrikGJ, 2) + " (GCV)",
+                 eksik: E.gcvEksik ? (E.gcvEksik + " kayıtta GCV çevrimi yapılamadı") : null };
+      case "enerji.toplamGJ":
+        return { deger: E.toplamGJ, birim: "GJ",
+                 kaynak: "Yakıt " + M.fmt(E.yakitGJ, 2) + " + elektrik " + M.fmt(E.elektrikGJ, 2) + " (NCV)" };
+      case "enerji.sebekeYuzde":
+        return yuzde(E.elektrikGJ, "Satın alınan şebeke elektriği");
+      case "enerji.alternatifYuzde":
+        return yuzde(E.alternatifYakitGJ_gcv, "Atık türevli yakıt");
+      case "enerji.yenilenebilirYuzde":
+        // Yenilenebilir yakıt + YEK-G/REC'li satın alınan elektrik. Yerinde üretim
+        // (GES) için veri modeli henüz yok (D-6); girilene kadar öz tüketim dışıdır.
+        var pay = E.yenilenebilirYakitGJ_gcv + sayi(T.k2.recKwh) * 0.0036;
+        var sr = yuzde(pay, "Yenilenebilir yakıt + sertifikalı elektrik");
+        if (sr && sr.deger != null) sr.eksik = "Yerinde üretim (GES) kayıt tipi yok; öz tüketim dahil edilemedi";
+        return sr;
+      default:
+        return null;
+    }
+  };
+
+  /* Bir metriğin tüm bileşenlerini çözer. Manuel bileşenlerde motorDeger null döner. */
+  M.metrikBilesenleri = function (metrik) {
+    if (!metrik || !metrik.bilesen) return null;
+    return metrik.bilesen.map(function (b) {
+      var m = b.kaynak === "motor" ? M.bilesenDegeri(b.motorAnahtar) : null;
+      return {
+        no: b.no, ad: b.ad, birim: b.birim, kaynak: b.kaynak, yuzde: !!b.yuzde,
+        not: b.not || null, kapsamUyarisi: b.kapsamUyarisi || null,
+        motorDeger: m ? m.deger : null,
+        motorKaynak: m ? m.kaynak : null,
+        eksik: m ? (m.eksik || null) : null
+      };
+    });
   };
 
   // Bir sektör metriği için "önerilen" motor değerini döner (varsa).

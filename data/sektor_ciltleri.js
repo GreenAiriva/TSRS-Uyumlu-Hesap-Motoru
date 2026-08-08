@@ -96,9 +96,24 @@ VERI.sektor_ciltleri = [
   "tip": "hafif",
   "onSecim": true,
   "metrikler": [
-   {"kod": "CG-MR-130a.1", "ad": "Toplam enerji, şebeke %, yenilenebilir %", "tip": "hesap", "birim": "GJ, %", "ortak": "enerji"},
-   {"kod": "CG-MR-000.A", "ad": "Perakende satış yeri + dağıtım merkezi sayısı", "tip": "veri", "birim": "sayı"},
-   {"kod": "CG-MR-000.B", "ad": "Perakende alanı + dağıtım merkezi alanı", "tip": "veri", "birim": "m²"}
+   {"kod": "CG-MR-130a.1", "ad": "Toplam enerji, şebeke %, yenilenebilir %", "tip": "hesap", "birim": "GJ, %", "ortak": "enerji",
+    "bilesen": [
+     {"no": 1, "ad": "Tüketilen toplam enerji", "birim": "GJ", "kaynak": "motor", "motorAnahtar": "enerji.toplamGJ_gcv", "not": "Cilt 6 md. 1.3: brüt ısıl değer (GCV/HHV) esaslı. Kapsam: yakıt + satın alınan elektrik + ısı/buhar/soğutma + öz tüketilen kendi üretimi.", "kapsamUyarisi": "Tesis kütüğü kurulana kadar TÜM tesisleri kapsar; Cilt 6 yalnızca perakende satış ve dağıtım tesislerini ister."},
+     {"no": 2, "ad": "Şebeke elektriği yüzdesi", "birim": "%", "kaynak": "motor", "motorAnahtar": "enerji.sebekeYuzde", "yuzde": true, "not": "md. 2.1: satın alınan şebeke elektriği / toplam enerji."},
+     {"no": 3, "ad": "Yenilenebilir enerji yüzdesi", "birim": "%", "kaynak": "motor", "motorAnahtar": "enerji.yenilenebilirYuzde", "yuzde": true, "not": "md. 4.3.1: yerinde üretimde YEK-G/REC elde tutulmuş ve iptal edilmiş olmalı. md. 4.3.3: şebeke karışımının yenilenebilir payı iddia edilemez. Şebeke yüzdesiyle çakışabilir."}
+    ]},
+   {"kod": "CG-MR-000.A", "ad": "Perakende satış yeri + dağıtım merkezi sayısı", "tip": "veri", "birim": "sayı",
+    "slot": "tesis",
+    "bilesen": [
+     {"no": 1, "ad": "Perakende satış yeri sayısı", "birim": "sayı", "kaynak": "motor", "motorAnahtar": "tesis.perakendeSayi", "not": "Aşağıdaki tesis tablosundan sayılır. Satırlar organizasyon hiyerarşisinden (indeks.org) canlı gelir; hiyerarşiye eklenen tesis tabloya düşer, çıkarılan sayımdan düşer."},
+     {"no": 2, "ad": "Dağıtım merkezi sayısı", "birim": "sayı", "kaynak": "motor", "motorAnahtar": "tesis.dagitimSayi"}
+    ]},
+   {"kod": "CG-MR-000.B", "ad": "Perakende alanı + dağıtım merkezi alanı", "tip": "veri", "birim": "m²",
+    "slot": "tesis",
+    "bilesen": [
+     {"no": 1, "ad": "Perakende alanı", "birim": "m²", "kaynak": "motor", "motorAnahtar": "tesis.perakendeM2", "not": "Tesis tablosundaki perakende alanlarının toplamı. DEPO+SHOWROOM tesislerde perakende ve dağıtım alanı ayrı girilir; aynı m² iki metrikte sayılmaz."},
+     {"no": 2, "ad": "Dağıtım merkezlerinin toplam alanı", "birim": "m²", "kaynak": "motor", "motorAnahtar": "tesis.dagitimM2"}
+    ]}
   ]
  },
  {
@@ -125,15 +140,55 @@ VERI.sektor_ciltleri = [
   "tip": "agir",
   "onSecim": true,
   "metrikler": [
-   {"kod": "EM-CM-110a.1", "ad": "Brüt K1 + emisyon sınırlayıcı düzenleme %", "tip": "hesap", "birim": "tCO2e, %", "ortak": "k1", "kapsam": 1},
+   {"kod": "EM-CM-110a.1", "ad": "Brüt K1 + emisyon sınırlayıcı düzenleme %", "tip": "hesap", "birim": "tCO2e, %", "ortak": "k1", "kapsam": 1,
+    "bilesen": [
+     {"no": 1, "ad": "Brüt toplam Kapsam 1 emisyonları", "birim": "tCO2e", "kaynak": "motor", "motorAnahtar": "k1.toplam", "not": "Kyoto Protokolü kapsamındaki yedi sera gazı (CO2, CH4, N2O, HFC, PFC, SF6, NF3)."},
+     {"no": 2, "ad": "Emisyon sınırlayıcı düzenlemeler kapsamındaki yüzde", "birim": "%", "kaynak": "manuel", "yuzde": true, "not": "Türkiye ETS (7552 sayılı İklim Kanunu) 2026-2027 pilot dönemi çimento, demir-çelik, alüminyum ve gübre sektörlerinde 50.000 tCO2e/yıl üzeri tesisleri kapsar. Kapsam dışıysa gerekçeli 0 girin."}
+    ]},
    {"kod": "EM-CM-110a.2", "ad": "K1 stratejisi/planı + performans", "tip": "ta"},
-   {"kod": "EM-CM-120a.1", "ad": "Hava kalitesi: NOx, SOx, PM10, dioksin/furan, VOC, PAH, ağır metal", "tip": "hesap", "birim": "t"},
-   {"kod": "EM-CM-130a.1", "ad": "Toplam enerji, şebeke %, alternatif %, yenilenebilir %", "tip": "hesap", "birim": "GJ, %", "ortak": "enerji"},
-   {"kod": "EM-CM-140a.1", "ad": "Çekilen/tüketilen su + su stresi %", "tip": "hesap", "birim": "bin m³, %", "ortak": "su"},
-   {"kod": "EM-CM-150a.1", "ad": "Atık: üretilen miktar + tehlikeli % + geri dönüşüm %", "tip": "veri", "birim": "t, %"},
-   {"kod": "EM-CM-410a.1", "ad": "Sürdürülebilir yapı sertifikası ürün geliri % (LEED/BREEAM)", "tip": "veri", "birim": "%"},
-   {"kod": "EM-CM-410a.2", "ad": "Çevresel etki azaltan ürünler için pazar + pazar payı", "tip": "ta"},
-   {"kod": "EM-CM-000.A", "ad": "Ana ürün grubuna göre üretim", "tip": "veri", "birim": "t"}
+   {"kod": "EM-CM-120a.1", "ad": "Hava kalitesi: NOx, SOx, PM10, dioksin/furan, VOC, PAH, ağır metal", "tip": "hesap", "birim": "t",
+    "bilesen": [
+     {"no": 1, "ad": "NOx (N2O hariç)", "birim": "t", "kaynak": "manuel"},
+     {"no": 2, "ad": "SOx", "birim": "t", "kaynak": "manuel"},
+     {"no": 3, "ad": "Partikül madde (PM10)", "birim": "t", "kaynak": "manuel"},
+     {"no": 4, "ad": "Dioksinler / furanlar", "birim": "t", "kaynak": "manuel"},
+     {"no": 5, "ad": "Uçucu organik bileşikler (VOC)", "birim": "t", "kaynak": "manuel"},
+     {"no": 6, "ad": "Polisiklik aromatik hidrokarbonlar (PAH)", "birim": "t", "kaynak": "manuel"},
+     {"no": 7, "ad": "Ağır metaller", "birim": "t", "kaynak": "manuel"}
+    ]},
+   {"kod": "EM-CM-130a.1", "ad": "Toplam enerji, şebeke %, alternatif %, yenilenebilir %", "tip": "hesap", "birim": "GJ, %", "ortak": "enerji",
+    "bilesen": [
+     {"no": 1, "ad": "Tüketilen toplam enerji", "birim": "GJ", "kaynak": "motor", "motorAnahtar": "enerji.toplamGJ_gcv", "not": "Cilt 8 md. 1.3: brüt ısıl değer (GCV/HHV) esaslı.", "kapsamUyarisi": "Bu satır Cilt 6 ve Cilt 8'e birlikte hizmet ediyor ancak tesis kapsamları farklı: Cilt 8 üretim tesislerini, Cilt 6 yalnızca perakende satış ve dağıtım tesislerini ister. Tesis kütüğü kurulana kadar değer TÜM tesisleri kapsıyor."},
+     {"no": 2, "ad": "Şebeke elektriği yüzdesi", "birim": "%", "kaynak": "motor", "motorAnahtar": "enerji.sebekeYuzde", "yuzde": true},
+     {"no": 3, "ad": "Alternatif enerji yüzdesi", "birim": "%", "kaynak": "motor", "motorAnahtar": "enerji.alternatifYuzde", "yuzde": true, "not": "Atık türevli yakıtlar: kullanılmış lastik, atık yağ ve çözücü, işlenmiş belediye/evsel atık, tarımsal atık (pirinç-fıstık-kahve kabuğu), hayvan yemi, kanalizasyon çamuru. Yoksa gerekçeli 0."},
+     {"no": 4, "ad": "Yenilenebilir enerji yüzdesi", "birim": "%", "kaynak": "motor", "motorAnahtar": "enerji.yenilenebilirYuzde", "yuzde": true, "not": "md. 4.3.1 YEK-G/REC elde tutulmuş ve iptal edilmiş olmalı; md. 4.3.3 şebeke karışımı iddia edilemez."}
+    ]},
+   {"kod": "EM-CM-140a.1", "ad": "Çekilen/tüketilen su + su stresi %", "tip": "hesap", "birim": "bin m³, %", "ortak": "su",
+    "bilesen": [
+     {"no": 1, "ad": "Çekilen toplam su", "birim": "bin m³", "kaynak": "manuel", "not": "Tüm kaynaklar: yüzey suyu, yer altı suyu, işletmenin topladığı yağmur suyu, belediye/su idaresi veya başka işletmelerden alınan su ve atık su. Yasal tanım yoksa tatlı su = <1.000 ppm çözünmüş katı."},
+     {"no": 2, "ad": "Tüketilen toplam su", "birim": "bin m³", "kaynak": "manuel", "not": "Tüketim = buharlaşan su + ürün/hizmete katılan su + çekildiği toplama alanına geri dönmeyen su. Çekim eksi deşarj."},
+     {"no": 3, "ad": "Su stresli bölgelerden çekim yüzdesi", "birim": "%", "kaynak": "manuel", "yuzde": true, "not": "WRI Su Riski Atlası: Yüksek (%40-80) veya Aşırı Yüksek (>%80) Temel Su Stresi. Atlas sürümü ve sorgu tarihi yazılmalı. Saha bazlı veri gerektirir."},
+     {"no": 4, "ad": "Su stresli bölgelerde tüketim yüzdesi", "birim": "%", "kaynak": "manuel", "yuzde": true}
+    ]},
+   {"kod": "EM-CM-150a.1", "ad": "Atık: üretilen miktar + tehlikeli % + geri dönüşüm %", "tip": "veri", "birim": "t, %",
+    "bilesen": [
+     {"no": 1, "ad": "Üretilen toplam atık", "birim": "t", "kaynak": "manuel", "not": "Gaz atıklar kapsam dışıdır (md. 1.3)."},
+     {"no": 2, "ad": "Tehlikeli atık yüzdesi", "birim": "%", "kaynak": "manuel", "yuzde": true, "not": "Türkiye'de Atık Yönetimi Yönetmeliği Ek-4 listesinde yıldızlı (*) kodlar tehlikelidir."},
+     {"no": 3, "ad": "Geri dönüştürülen atık yüzdesi", "birim": "%", "kaynak": "manuel", "yuzde": true, "not": "md. 3.2: enerji geri kazanımı dâhil yakılan malzemeler (R1) geri dönüştürülmüş SAYILMAZ. Düzenli depolamaya gidenler (D kodları) de sayılmaz."}
+    ]},
+   {"kod": "EM-CM-410a.1", "ad": "Sürdürülebilir yapı sertifikası ürün geliri % (LEED/BREEAM)", "tip": "veri", "birim": "%",
+    "bilesen": [
+     {"no": 1, "ad": "Sertifikalı sürdürülebilir yapı ürünlerinden gelir yüzdesi", "birim": "%", "kaynak": "manuel", "yuzde": true}
+    ]},
+   {"kod": "EM-CM-410a.2", "ad": "Çevresel etki azaltan ürünler için pazar + pazar payı", "tip": "ta",
+    "bilesen": [
+     {"no": 1, "ad": "Toplam adreslenebilir pazar", "birim": "para birimi", "kaynak": "manuel", "not": "DİKKAT: bu metrik katalogda tip='ta' (anlatı) olarak sınıflanmış, ancak cilt nicel açıklama istiyor. Sınıflandırma kararı bekliyor."},
+     {"no": 2, "ad": "Pazar payı", "birim": "%", "kaynak": "manuel", "yuzde": true}
+    ]},
+   {"kod": "EM-CM-000.A", "ad": "Ana ürün grubuna göre üretim", "tip": "veri", "birim": "t",
+    "bilesenTipi": "dinamik",
+    "satirSemasi": {"urunGrubu": "metin", "gelirPayi": "%", "miktar": "t"},
+    "not": "Ana ürün hattının belirlenmesi gelir elde edilmesine dayalı olmalıdır; çok sayıda küçük gelir akışı 'diğer' kategorisinde birleştirilebilir. Bileşen sayısı sabit değildir."}
   ]
  },
  {
