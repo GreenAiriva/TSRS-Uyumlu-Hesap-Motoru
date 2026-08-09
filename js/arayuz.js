@@ -959,12 +959,17 @@ window.UI = (function () {
     ["perakende", "Perakende"], ["dagitim", "Dağıtım"],
     ["ikisi", "Perakende + Dağıtım"], ["disi", "Kapsam dışı"]
   ];
-  function tesisSlotTablosu() {
+  function tesisSlotTablosu(m) {
     if (!(window.Motor && Motor.tesisSlotlari)) return null;
     var S = Motor.tesisSlotlari();
     var SOLUK = "var(--soluk,#6E7479)";
     var CIZGI = "1px solid var(--cizgi,#D9DBD4)";
-    var IZ = "display:grid;grid-template-columns:66px minmax(0,1fr) 158px 86px 86px;gap:0 10px;align-items:center";
+    /* Mod, metriğin bileşen birimlerinden türer:
+       m² bileşeni varsa alan modu (CG-MR-000.B), yoksa sayım modu (CG-MR-000.A).
+       Sayım modunda m² kolonları hiç çizilmez — o metrik alan istemiyor. */
+    var alanModu = (m && m.bilesen || []).some(function (b) { return b.birim === "m²"; });
+    var IZ = "display:grid;grid-template-columns:66px minmax(0,1fr) 158px" +
+      (alanModu ? " 86px 86px" : "") + ";gap:0 10px;align-items:center";
     var kok = el("div", { style: "margin-bottom:14px" }, []);
 
     kok.appendChild(el("div", { class: "bilgi", style: "margin:0 0 10px;font-size:11.5px" }, [
@@ -981,8 +986,8 @@ window.UI = (function () {
     kok.appendChild(el("div", { style: IZ + ";font-size:11px;color:" + SOLUK +
       ";padding-bottom:6px;border-bottom:" + CIZGI }, [
       el("span", null, ["Kod"]), el("span", null, ["Tesis"]), el("span", null, ["Sınıf"]),
-      el("span", { style: "text-align:right" }, ["Perakende m²"]),
-      el("span", { style: "text-align:right" }, ["Dağıtım m²"])
+      alanModu ? el("span", { style: "text-align:right" }, ["Perakende m²"]) : null,
+      alanModu ? el("span", { style: "text-align:right" }, ["Dağıtım m²"]) : null
     ]));
 
     S.satir.forEach(function (s, ix) {
@@ -1024,31 +1029,44 @@ window.UI = (function () {
       }
       var p = s.sinif === "perakende" || s.sinif === "ikisi";
       var d = s.sinif === "dagitim"   || s.sinif === "ikisi";
-      satir.appendChild(alanGirdi("m2p", p, s.m2p));
-      satir.appendChild(alanGirdi("m2d", d, s.m2d));
+      if (alanModu) {
+        satir.appendChild(alanGirdi("m2p", p, s.m2p));
+        satir.appendChild(alanGirdi("m2d", d, s.m2d));
+      }
       kok.appendChild(satir);
     });
 
+    /* ---- Çıktı bloku: metriğin iki bileşeni, tablonun hemen altında ---- */
     var t = S.toplam;
-    kok.appendChild(el("div", { style: IZ + ";padding:9px 0;border-top:2px solid var(--cizgi,#D9DBD4);" +
-      "font-weight:600;font-size:12.5px" }, [
-      el("span", null, [""]),
-      el("span", { style: "font-weight:400;color:" + SOLUK + ";font-size:11.5px" },
-        ["Kapsamda " + t.kapsamda + " tesis · perakende " + t.perakendeSayi + " · dağıtım " + t.dagitimSayi]),
-      el("span", null, [""]),
-      el("span", { style: "text-align:right;font-variant-numeric:tabular-nums" }, [Motor.fmt(t.perakendeM2, 0)]),
-      el("span", { style: "text-align:right;font-variant-numeric:tabular-nums" }, [Motor.fmt(t.dagitimM2, 0)])
-    ]));
+    function ciktiKutu(etiket, deger, birim) {
+      return el("div", { style: "flex:1;background:var(--yuzey-2,#F2F1EC);border-radius:8px;padding:9px 12px" }, [
+        el("div", { style: "font-size:10.5px;color:" + SOLUK + ";letter-spacing:.4px;text-transform:uppercase" }, [etiket]),
+        el("div", { style: "font-size:19px;font-weight:700;font-variant-numeric:tabular-nums;line-height:1.25" },
+          [deger + (birim ? " " : "")]),
+        birim ? el("span", { style: "font-size:11px;color:" + SOLUK }, [birim]) : null
+      ]);
+    }
+    kok.appendChild(el("div", { style: "display:flex;gap:10px;margin-top:12px;" +
+      "border-top:2px solid var(--cizgi,#D9DBD4);padding-top:12px" },
+      alanModu
+        ? [ciktiKutu("Perakende alanı", Motor.fmt(t.perakendeM2, 0), "m²"),
+           ciktiKutu("Dağıtım merkezi alanı", Motor.fmt(t.dagitimM2, 0), "m²")]
+        : [ciktiKutu("Perakende satış yeri", String(t.perakendeSayi), "adet"),
+           ciktiKutu("Dağıtım merkezi", String(t.dagitimSayi), "adet")]
+    ));
+    kok.appendChild(el("div", { style: "font-size:11px;color:" + SOLUK + ";margin-top:6px" },
+      ["Kapsamda " + t.kapsamda + " tesis · sınıfı “Kapsam dışı” olanlar sayılmaz." +
+       (alanModu ? "" : " Her tesis bir satış yeri sayılır; bir lokasyonda birden fazla birim varsa hiyerarşide ayrı kayıt açın.")]));
 
-    if (t.m2Eksik)
+    if (alanModu && t.m2Eksik)
       kok.appendChild(el("div", { class: "bilgi", style: "margin:9px 0 0;font-size:11.5px" },
         [t.m2Eksik + " tesiste alan verisi girilmemiş — CG-MR-000.B eksik kalır."]));
 
     S.yetim.forEach(function (y) {
       kok.appendChild(el("div", { class: "bilgi", style: "margin:9px 0 0;font-size:11.5px;" +
         "background:#F8E8E4;border-color:#EBCFC7;border-left-color:var(--oksit,#A03E1E);color:#6B2E19" }, [
-        y.id + " organizasyon hiyerarşisinde bulunmuyor; kayıtlı alan verisi (" +
-          Motor.fmt((y.m2p || 0) + (y.m2d || 0), 0) + " m²) hesaba katılmadı. ",
+        y.id + " organizasyon hiyerarşisinde bulunmuyor; sayımdan ve toplamdan düşürüldü" +
+          ((y.m2p || y.m2d) ? " (kayıtlı " + Motor.fmt((y.m2p || 0) + (y.m2d || 0), 0) + " m² hesaba katılmadı)" : "") + ". ",
         el("button", { class: "btn kucuk", type: "button", style: "margin-left:6px",
           onclick: function () {
             delete Depo.tesisSinif()[y.id]; Depo.kaydet(true);
@@ -1073,7 +1091,7 @@ window.UI = (function () {
 
     // Slot tablolu metrikler: tesis satırları bileşenlerin ÜSTÜNDE
     if (m.slot === "tesis") {
-      var tablo = tesisSlotTablosu();
+      var tablo = tesisSlotTablosu(m);
       if (tablo) kok.appendChild(tablo);
     }
 

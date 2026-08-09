@@ -4,7 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Karbon Ayak İzi Hesap Motoru — TSRS Uyumlu</title>
-<link rel="stylesheet" href="css/stil.css">
+<link rel="stylesheet" href="css/stil.css?v=14">
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect y='0' width='32' height='9' fill='%23B4642D'/%3E%3Crect y='9' width='32' height='9' fill='%231F7A63'/%3E%3Crect y='18' width='32' height='9' fill='%235B6B7C'/%3E%3Crect y='27' width='32' height='5' fill='%2323282D'/%3E%3C/svg%3E">
 </head>
 <body>
@@ -19,20 +19,20 @@
 
 <!-- ============ DÜZENLENEBİLİR VERİ DOSYALARI (data/ klasörü) ============
      Sıralama önemli değildir; hepsi window.VERI altına yazar. -->
-<script src="data/ayarlar.js?v=13"></script>
-<script src="data/listeler.js?v=13"></script>
-<script src="data/tsrs_modulleri.js?v=13"></script>
-<script src="data/sektor_ciltleri.js?v=13"></script>
-<script src="data/ef_kaynaklari.js?v=13"></script>
-<script src="data/kip_ar5.js?v=13"></script>
-<script src="data/ef_sabit_yanma.js?v=13"></script>
-<script src="data/ef_mobil_yakit.js?v=13"></script>
-<script src="data/ef_mobil_mesafe.js?v=13"></script>
-<script src="data/ef_tasimacilik.js?v=13"></script>
-<script src="data/ef_toplu_tasima.js?v=13"></script>
-<script src="data/ef_elektrik.js?v=13"></script>
-<script src="data/kacak_oranlari.js?v=13"></script>
-<script src="data/yakit_ekonomisi.js?v=13"></script>
+<script src="data/ayarlar.js?v=14"></script>
+<script src="data/listeler.js?v=14"></script>
+<script src="data/tsrs_modulleri.js?v=14"></script>
+<script src="data/sektor_ciltleri.js?v=14"></script>
+<script src="data/ef_kaynaklari.js?v=14"></script>
+<script src="data/kip_ar5.js?v=14"></script>
+<script src="data/ef_sabit_yanma.js?v=14"></script>
+<script src="data/ef_mobil_yakit.js?v=14"></script>
+<script src="data/ef_mobil_mesafe.js?v=14"></script>
+<script src="data/ef_tasimacilik.js?v=14"></script>
+<script src="data/ef_toplu_tasima.js?v=14"></script>
+<script src="data/ef_elektrik.js?v=14"></script>
+<script src="data/kacak_oranlari.js?v=14"></script>
+<script src="data/yakit_ekonomisi.js?v=14"></script>
 
 <!-- ============ BULUT ALTYAPISI ============
      Supabase istemcisi (çok-kullanıcılı veritabanı + kimlik) ve JSON Patch (geri al).
@@ -40,20 +40,20 @@
      veritabanı çağrıları internet gerektirir. -->
 <script src="js/vendor/supabase.min.js"></script>
 <script src="js/vendor/fast-json-patch.min.js"></script>
-<script src="js/sb.js?v=13"></script>
+<script src="js/sb.js?v=14"></script>
 
 <!-- ============ UYGULAMA ÇEKİRDEĞİ (js/ klasörü) ============
      Sıralama önemlidir: depo → motor → arayüz → sayfalar → auth (bootstrap)
      ?v=N sürüm damgası: dağıtımda artırınca istemciler önbellekteki eski
      sürüm yerine güncel dosyayı çeker. -->
-<script src="js/depo.js?v=13"></script>
-<script src="js/motor.js?v=13"></script>
-<script src="js/arayuz.js?v=13"></script>
-<script src="js/panel.js?v=13"></script>
-<script src="js/indeks.js?v=13"></script>
-<script src="js/rapor.js?v=13"></script>
-<script src="js/admin.js?v=13"></script>
-<script src="js/auth.js?v=13"></script>
+<script src="js/depo.js?v=14"></script>
+<script src="js/motor.js?v=14"></script>
+<script src="js/arayuz.js?v=14"></script>
+<script src="js/panel.js?v=14"></script>
+<script src="js/indeks.js?v=14"></script>
+<script src="js/rapor.js?v=14"></script>
+<script src="js/admin.js?v=14"></script>
+<script src="js/auth.js?v=14"></script>
 
 <script>
 document.addEventListener("DOMContentLoaded", function () {
