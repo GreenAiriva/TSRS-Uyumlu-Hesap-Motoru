@@ -314,6 +314,7 @@ window.UI = (function () {
         ref: "Kurumsal veri yönetim indeksi — organizasyon hiyerarşisi • RFI takibi • doküman • kanıt • matris" },
       { yol: "faaliyet", ad: "Faaliyet Verisi (K1 ve K3)", ikon: "▲", ciz: cizFaaliyet, durum: "faaliyet", ref: "Kapsam 1 ve 3 — GHG Protokolü Böl. 4 ve 15" },
       { yol: "sogutucu", ad: "Soğutucu / Kaçak Gazlar",   ikon: "❄", ciz: cizSogutucu, durum: "sogutucu", ref: "Kapsam 1 — IPCC 2006 Cilt 3 Böl. 7" },
+      { yol: "atik",     ad: "Atık",                       ikon: "♻", ciz: cizAtik, durum: "atik", ref: "Cilt 8 EM-CM-150a.1 • Atık Yön. Yön. Ek-4" },
       { yol: "elektrik", ad: "Kapsam 2 — Elektrik",       ikon: "⚡", ciz: cizElektrik, durum: "elektrik", ref: "TSRS 2 md. 29(a)(ii)-(iii) — ikili raporlama" },
       { yol: "sektormetrik", ad: "Sektör Metrikleri", ikon: "◈", ciz: cizSektorMetrikleri, durum: "sektormetrik", ref: "TSRS 2 Ek Ciltleri — seçili sektör metrikleri" },
       { yol: "veriaktarim", ad: "Veri Aktarımı", ikon: "⇄", ciz: cizVeriAktarim, ref: "CSV ile faaliyet içe aktarma • şirket paketi yedek/taşıma" },
@@ -2027,6 +2028,304 @@ window.UI = (function () {
         ]
       })
     ], { kapsam: "k1", mini: liste.length + " kayıt" }));
+  }
+
+  /* ============================================================
+     SAYFA: ATIK (Cilt 8 EM-CM-150a.1 • Atık Yön. Yön. Ek-4)
+     Şema girdiler: no, birimId, donem, atikKodu, atikAdi, miktar_t, miktarBirim,
+     islemKodu, islemYeri, beyanKontrolNo, aliciTesisKodu, atikYagKategori,
+     aciklama, veriKalite. Tehlikeli + geri dönüşüm sayımı motor türetir.
+     ============================================================ */
+  function ilkAtikKodu(str) {
+    var m = String(str || "").match(/\d{2}\s*\d{2}\s*\d{2}/);
+    return m ? m[0] : "";
+  }
+  function atikKodEtiketi(r) { return r.kod + " — " + UI.kisalt(r.ad, 60) + (r.tehlikeli ? "  (T)" : ""); }
+  function atikKodDatalist(naceKodu) {
+    var kat = Depo.set("atik_kodlari") || [];
+    if (naceKodu && naceKodu !== "*") {
+      var nk = (Depo.set("nace_atik") || {})[naceKodu];
+      if (nk && nk.kodlar) {
+        var izin = {}; nk.kodlar.forEach(function (k) { izin[String(k).replace(/[^0-9]/g, "")] = 1; });
+        kat = kat.filter(function (r) { return izin[String(r.kod).replace(/[^0-9]/g, "")]; });
+      }
+    }
+    return kat.map(atikKodEtiketi);
+  }
+
+  function atikFormu(kayit, bittiginde) {
+    var s = Object.assign({ donem: "2025", islemYeri: "Tesis Dışı", miktarBirim: "kg", veriKalite: "" }, kayit || {});
+    var izgara = el("div", { class: "form-izgara" });
+    var onizleme = el("div", { class: "bilgi", style: "margin:16px 0 0" });
+
+    var naceler = Object.keys(Depo.set("nace_atik") || {});
+    var aNo = noAlaniOlustur(s.no, "A");
+    var aBirimSec = birimAlaniOlustur(kayit ? (s.birimId || "") : null);
+    var aNace = UI.alan({ anahtar: "_nace", etiket: "NACE Filtresi (öneri)", tip: "secim", liste: [],
+      yardim: "Tesisin NACE'ine göre kod listesini daraltır. Öneri filtresidir; 'Tümü' ile 838 kodun tamamı görünür." });
+    aNace.girdi.innerHTML = "";
+    aNace.girdi.appendChild(el("option", { value: "*" }, ["Tümü (838 kod)"]));
+    naceler.forEach(function (n) { aNace.girdi.appendChild(el("option", { value: n }, [n])); });
+
+    var aKod = UI.alan({ anahtar: "_kodSecim", etiket: "Atık Kodu (Ek-4)", tip: "metin", zorunlu: true,
+      datalist: atikKodDatalist("*"),
+      deger: s.atikKodu ? (s.atikKodu + (s.atikAdi ? " — " + UI.kisalt(s.atikAdi, 60) : "")) : "",
+      yardim: "Yazmaya başlayın: örn. 13 02 08 veya 130208. Tehlikelilik koddan otomatik gelir." });
+    var aMiktar = UI.alan({ anahtar: "_miktar", etiket: "Miktar", tip: "sayi", zorunlu: true,
+      deger: (s.miktar_t != null && s.miktar_t !== "")
+        ? (s.miktarBirim === "ton" ? Motor.sayi(s.miktar_t) : Motor.sayi(s.miktar_t) * 1000) : "" });
+    var aBirimOlcu = UI.alan({ anahtar: "_birimOlcu", etiket: "Birim", tip: "secim", liste: [] });
+    aBirimOlcu.girdi.innerHTML = "";
+    ["kg", "ton"].forEach(function (u) { aBirimOlcu.girdi.appendChild(el("option", { value: u }, [u])); });
+    aBirimOlcu.girdi.value = s.miktarBirim || "kg";
+    var aIslem = UI.alan({ anahtar: "islemKodu", etiket: "İşleme Yöntemi (R/D)", tip: "metin", zorunlu: true, deger: s.islemKodu,
+      datalist: ["R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8", "R9", "R10", "R11", "R12", "R13",
+                 "D1", "D2", "D3", "D4", "D5", "D8", "D9", "D10", "D12", "D13", "D14", "D15"],
+      yardim: "TABS beyanındaki işleme yöntemi. R2–R11 geri dönüşüm sayılır; R1/R12/R13 ve D kodları sayılmaz." });
+    var aIslemYeri = UI.alan({ anahtar: "islemYeri", etiket: "İşlemin Yeri", tip: "secim", liste: [] });
+    aIslemYeri.girdi.innerHTML = "";
+    ["Tesis Dışı", "Tesis İçi"].forEach(function (u) { aIslemYeri.girdi.appendChild(el("option", { value: u }, [u])); });
+    aIslemYeri.girdi.value = s.islemYeri || "Tesis Dışı";
+    var aBeyan = UI.alan({ anahtar: "beyanKontrolNo", etiket: "Beyan Kontrol No", tip: "metin", deger: s.beyanKontrolNo,
+      yardim: "TABS Atık Beyan Formundaki kontrol numarası — denetim kanıt çapası" });
+    var aAlici = UI.alan({ anahtar: "aliciTesisKodu", etiket: "Alıcı İşleme Tesisi Kodu", tip: "metin", deger: s.aliciTesisKodu });
+    var aYag = UI.alan({ anahtar: "atikYagKategori", etiket: "Atık Yağ Kategorisi", tip: "metin", deger: s.atikYagKategori,
+      yardim: "Yalnızca atık yağlarda (13 xx): I / II / III. kategori" });
+    var aDonem = UI.alan({ anahtar: "donem", etiket: "Dönem / Yıl", tip: "metin", deger: s.donem });
+    var aKalite = UI.alan({ anahtar: "veriKalite", etiket: "Veri Kalitesi", tip: "secim", liste: "veri_kalitesi", deger: s.veriKalite });
+    var aNot = UI.alan({ anahtar: "aciklama", etiket: "Açıklama / Dayanak", tip: "metin", deger: s.aciklama, genis: true });
+
+    function naceDegisti() {
+      var yeni = atikKodDatalist(aNace.girdi.value);
+      var dl = aKod.girdi.parentListe;
+      if (dl) { dl.innerHTML = ""; yeni.forEach(function (v) { dl.appendChild(el("option", { value: v })); }); }
+    }
+    function onizle() {
+      var bilgi = Motor.atikKoduBilgi(ilkAtikKodu(aKod.girdi.value));
+      var raw = Motor.sayi(aMiktar.girdi.value);
+      var ton = aBirimOlcu.girdi.value === "ton" ? raw : raw / 1000;
+      var sinif = Motor.atikIslemSinifi(aIslem.girdi.value);
+      UI.alanHata(aKod, (aKod.girdi.value && !bilgi.bulundu)
+        ? "Bu kod Ek-4 kataloğunda bulunamadı; kod 'NN NN NN' biçiminde olmalı." : "");
+      onizleme.className = "bilgi" + (bilgi.bulundu ? " yesil" : "");
+      onizleme.innerHTML = (bilgi.bulundu
+        ? "<b>" + bilgi.kodNorm + "</b> — " + UI.kacir(bilgi.ad) + " • <b>" + (bilgi.tehlikeli ? "TEHLİKELİ" : "tehlikesiz") + "</b>"
+        : "Atık kodu bekleniyor") +
+        "<br>" + Motor.fmt(ton, 3) + " t • İşlem: <b>" + UI.kacir(sinif.durum) + "</b> — " +
+        (sinif.sayilir ? "geri dönüşüme SAYILIR" + (sinif.isaretli ? " (işaretli/tartışmalı)" : "") : "geri dönüşüme sayılmaz") +
+        (sinif.uyari ? "<br><span style='font-size:11.5px'>⚠ " + UI.kacir(sinif.uyari) + "</span>" : "");
+    }
+    aNace.girdi.addEventListener("change", naceDegisti);
+    [aKod, aMiktar, aBirimOlcu, aIslem].forEach(function (a) {
+      a.girdi.addEventListener("input", onizle); a.girdi.addEventListener("change", onizle);
+    });
+    [aNo, aBirimSec, aNace, aKod, aMiktar, aBirimOlcu, aIslem, aIslemYeri, aBeyan, aAlici, aYag, aDonem, aKalite, aNot]
+      .forEach(function (a) { izgara.appendChild(a); });
+    var govde = el("div", null, [izgara, onizleme]);
+    onizle();
+
+    UI.modal(kayit ? "Atık Kaydını Düzenle — " + (kayit.no || "") : "Yeni Atık Kaydı", govde, [
+      { etiket: "Vazgeç" },
+      { etiket: "Kaydet", sinif: "birincil", tik: function (kapat) {
+        UI.alanHatalariTemizle(izgara);
+        var hataVar = false;
+        var bilgi = Motor.atikKoduBilgi(ilkAtikKodu(aKod.girdi.value));
+        if (!bilgi.bulundu) { UI.alanHata(aKod, "Geçerli bir Ek-4 atık kodu seçin/girin (NN NN NN)"); hataVar = true; }
+        var raw = Motor.sayi(aMiktar.girdi.value);
+        if (!(raw > 0)) { UI.alanHata(aMiktar, "Sıfırdan büyük bir miktar girin"); hataVar = true; }
+        if (!String(aIslem.girdi.value || "").trim()) { UI.alanHata(aIslem, "İşleme yöntemi (R/D) girin"); hataVar = true; }
+        var v = UI.degerler(izgara);
+        if (noCakisiyor("atik", v.no, kayit ? kayit.no : null)) { UI.alanHata(aNo, "Bu numara başka bir atık kaydında kullanılıyor"); hataVar = true; }
+        if (hataVar) { var ilkH = izgara.querySelector(".alan-hatali input, .alan-hatali select"); if (ilkH) ilkH.focus(); return; }
+        var unit = aBirimOlcu.girdi.value || "kg";
+        var yeni = {
+          no: noBelirle("atik", "A", v.no),
+          birimId: v.birimId || "",
+          donem: v.donem || "",
+          atikKodu: bilgi.kodNorm,
+          atikAdi: bilgi.ad,
+          miktar_t: unit === "ton" ? raw : raw / 1000,
+          miktarBirim: unit,
+          islemKodu: String(aIslem.girdi.value || "").toUpperCase().replace(/\s+/g, ""),
+          islemYeri: v.islemYeri || "",
+          beyanKontrolNo: v.beyanKontrolNo || "",
+          aliciTesisKodu: v.aliciTesisKodu || "",
+          atikYagKategori: v.atikYagKategori || "",
+          aciklama: v.aciklama || "",
+          veriKalite: v.veriKalite || ""
+        };
+        bittiginde(yeni); kapat();
+      } }
+    ]);
+  }
+
+  /* TABS Atık Beyan Formu satırlarını yapıştırarak toplu içe aktarma */
+  function atikBeyanIceAktar(bittiginde) {
+    var aBirimSec = birimAlaniOlustur(null);
+    var ta = el("textarea", { class: "form-izgara", rows: 8,
+      style: "width:100%;min-height:170px;font-family:monospace;font-size:12px",
+      placeholder: "Her satır: ATIK_KODU ; MİKTAR(kg) ; İŞLEM(R/D) ; BEYAN_NO ; ALICI_KODU\n130208 ; 400 ; R9 ; 9233650 ; 110216\n150106 ; 3060 ; R12 ; 9233651 ; 98928" });
+    var ozet = el("div", { class: "bilgi", style: "margin-top:10px" }, ["Yapıştırın; geçerli satır sayısı burada görünür."]);
+    function ayikla() {
+      var satirlar = String(ta.value || "").split(/\r?\n/).map(function (l) { return l.trim(); }).filter(Boolean);
+      var kayitlar = [], hata = 0;
+      satirlar.forEach(function (l) {
+        var p = l.split(/[;\t|]/).map(function (x) { return x.trim(); }).filter(Boolean);
+        var kodTok = null, islemTok = null, miktarTok = null;
+        p.forEach(function (x) {
+          if (!kodTok && /^\d{2}\s?\d{2}\s?\d{2}$|^\d{6}$/.test(x)) kodTok = x;
+          else if (!islemTok && /^[RD]\d{1,2}$/i.test(x)) islemTok = x;
+          else if (!miktarTok && /^[\d.,]+$/.test(x)) miktarTok = x;
+        });
+        var bilgi = Motor.atikKoduBilgi(kodTok);
+        if (!bilgi.bulundu || !islemTok || !(Motor.sayi(miktarTok) > 0)) { hata++; return; }
+        var kalan = p.filter(function (x) { return x !== kodTok && x !== islemTok && x !== miktarTok; });
+        kayitlar.push({
+          atikKodu: bilgi.kodNorm, atikAdi: bilgi.ad,
+          miktar_t: Motor.sayi(miktarTok) / 1000, miktarBirim: "kg",
+          islemKodu: islemTok.toUpperCase(),
+          beyanKontrolNo: kalan[0] || "", aliciTesisKodu: kalan[1] || ""
+        });
+      });
+      return { kayitlar: kayitlar, hata: hata };
+    }
+    ta.addEventListener("input", function () {
+      var r = ayikla();
+      ozet.className = "bilgi" + (r.kayitlar.length ? " yesil" : "");
+      ozet.innerHTML = "<b>" + r.kayitlar.length + "</b> geçerli satır" +
+        (r.hata ? " • " + r.hata + " satır atlanacak (eksik/geçersiz kod, işlem ya da miktar)" : "");
+    });
+    var govde = el("div", null, [
+      el("div", { class: "bilgi" }, ["TABS Atık Beyan Formu satırlarını yapıştırın. Ayraç noktalı virgül, sekme ya da | olabilir. " +
+        "Miktar kg kabul edilir (tona çevrilir). Kod ve işleme yöntemi (R/D) zorunlu; Beyan Kontrol No denetim kanıtı olarak saklanır. " +
+        "Tüm satırlar aşağıda seçtiğiniz tesise (birim) yazılır."]),
+      aBirimSec, ta, ozet
+    ]);
+    UI.modal("Atık Beyanı İçe Aktar", govde, [
+      { etiket: "Vazgeç" },
+      { etiket: "İçe Aktar", sinif: "birincil", tik: function (kapat) {
+        var r = ayikla();
+        if (!r.kayitlar.length) { ozet.className = "bilgi"; ozet.innerHTML = "Geçerli satır bulunamadı."; return; }
+        var g = aBirimSec.querySelector ? aBirimSec.querySelector("[data-anahtar]") : null;
+        var birimId = g ? g.value : "";
+        r.kayitlar.forEach(function (k) {
+          k.no = Depo.yeniNo("A", "atik");
+          k.birimId = birimId;
+          k.donem = "2025";
+          k.veriKalite = "Birincil (beyan)";
+          k.islemYeri = "Tesis Dışı";
+          k.atikYagKategori = "";
+          k.aciklama = "TABS Atık Beyanı içe aktarıldı" + (k.beyanKontrolNo ? " • Beyan No " + k.beyanKontrolNo : "");
+          tazeDizi("atik").push(k);
+        });
+        UI.bildir(r.kayitlar.length + " atık kaydı içe aktarıldı" + (r.hata ? " (" + r.hata + " satır atlandı)" : ""));
+        bittiginde(); kapat();
+      } }
+    ]);
+  }
+
+  function cizAtik(kok) {
+    var liste = Depo.veri.atik || [];
+    function yenile() { UI.ciz(); }
+
+    UI.ustAksiyon(el("div", null, [
+      el("button", { class: "btn ikincil", type: "button", style: "margin-right:8px", onclick: function () {
+        atikBeyanIceAktar(function () { yenile(); });
+      } }, ["⇪ Beyan İçe Aktar"]),
+      el("button", { class: "btn birincil", type: "button", onclick: function () {
+        atikFormu(null, function (v) { tazeDizi("atik").push(v); Depo.kaydet(); yenile(); });
+      } }, ["+ Yeni Kayıt"])
+    ]));
+
+    kok.appendChild(el("div", { class: "bilgi" }, [
+      "Atık kayıtları tesis bazlıdır ve TABS Atık Beyan Formlarına dayanır (kanıt: Beyan Kontrol No). " +
+      "Tehlikelilik atık kodundaki yıldızdan (Ek-4), geri dönüşüm sayımı işleme yönteminden (R/D) türetilir: " +
+      "R2–R11 sayılır; R1/R12/R13 ve D kodları sayılmaz."
+    ]));
+
+    var T = Motor.toplamlar(), A = T.atik;
+    if (A.uyari && A.uyari.length) {
+      kok.appendChild(el("div", { class: "bilgi", style: "border-left-color:var(--oksit,#B4642D)" }, [
+        el("b", null, [A.uyari.length + " kayıt işlem kodu uyarısı taşıyor (geri dönüşüme sayılmadı). "]),
+        el("span", { style: "font-size:12px;color:var(--soluk)" }, [UI.kisalt(A.uyari.join(" • "), 260)])
+      ]));
+    }
+
+    birimSeciciCiz(kok, liste);
+    var gosterilen = birimSuz(liste);
+    kok.appendChild(UI.kart("Atık Kayıtları", [
+      UI.veriTablo({
+        satirlar: gosterilen,
+        bosMesaj: liste.length ? "Seçili birimde (ve alt birimlerinde) kayıt yok."
+          : "Henüz atık kaydı yok. Sağ üstteki “+ Yeni Kayıt” veya “⇪ Beyan İçe Aktar” ile başlayın.",
+        sutunlar: [
+          { etiket: "No", deger: function (s) { return s.no; } },
+          indeksBirimleri().length ? birimKolonu() : null,
+          { etiket: "Kod", deger: function (s) { return s.atikKodu; } },
+          { etiket: "Atık", deger: function (s) { return UI.kisalt(s.atikAdi || Motor.atikKoduBilgi(s.atikKodu).ad, 34); } },
+          { etiket: "Miktar (t)", sinif: "sayi", deger: function (s) { return Motor.fmt(Motor.sayi(s.miktar_t), 3); } },
+          { etiket: "Tehlikeli", deger: function (s) {
+            return Motor.atikKoduBilgi(s.atikKodu).tehlikeli
+              ? el("span", { class: "rozet uyari" }, ["T"]) : el("span", { style: "color:var(--soluk)" }, ["—"]);
+          } },
+          { etiket: "İşlem", deger: function (s) {
+            var si = Motor.atikIslemSinifi(s.islemKodu);
+            return el("span", { title: si.durum + (si.uyari ? " — " + si.uyari : "") }, [s.islemKodu || "—"]);
+          } },
+          { etiket: "Geri dön.", deger: function (s) {
+            var si = Motor.atikIslemSinifi(s.islemKodu);
+            return si.sayilir ? el("b", { title: si.durum }, [si.isaretli ? "✓!" : "✓"]) : el("span", { style: "color:var(--soluk)", title: si.durum }, ["✗"]);
+          } }
+        ],
+        islemler: [
+          { etiket: "Düzenle", tik: function (s) {
+            atikFormu(s, function (v) { tazeGuncelleNoIle("atik", s.no, v); Depo.kaydet(); yenile(); });
+          } },
+          { etiket: "Sil", sinif: "tehlike", tik: function (s) {
+            UI.onayla("“" + (s.no || "") + " — " + (s.atikKodu || "") + "” kaydı silinsin mi?", function () {
+              var ix = tazeIndeks("atik", s.no);
+              if (ix > -1) { tazeDizi("atik").splice(ix, 1); Depo.kaydet(); }
+              yenile();
+            });
+          } }
+        ]
+      })
+    ], { mini: liste.length + " kayıt • toplam " + Motor.fmt(A.toplam_t, 3) + " t" }));
+
+    if (A.kayit) {
+      var kodSatir = Object.keys(A.koda).map(function (k) { return { kod: k, t: A.koda[k] }; })
+        .sort(function (a, b) { return b.t - a.t; });
+      var tesisSatir = Object.keys(A.tesise).map(function (k) { return { t: k, v: A.tesise[k] }; })
+        .sort(function (a, b) { return b.v - a.v; });
+      kok.appendChild(UI.kart("Kırılımlar ve Yüzdeler", [
+        el("div", { class: "bilgi" + (A.toplam_t > 0 ? " yesil" : "") }, [
+          "Toplam " + Motor.fmt(A.toplam_t, 3) + " t • Tehlikeli %" +
+          (A.toplam_t > 0 ? Motor.fmt(A.tehlikeli_t / A.toplam_t * 100, 1) : "0") + " (" + Motor.fmt(A.tehlikeli_t, 3) + " t) • Geri dönüşüm %" +
+          (A.toplam_t > 0 ? Motor.fmt(A.geriDonusum_t / A.toplam_t * 100, 1) : "0") + " (" + Motor.fmt(A.geriDonusum_t, 3) + " t)" +
+          (A.araIslem_t > 0 ? " • Ara işlemde (R12/R13, sayılmadı) " + Motor.fmt(A.araIslem_t, 3) + " t" : "") +
+          (A.kodBulunamadi ? " • " + A.kodBulunamadi + " kayıtta kod katalogda yok" : "")
+        ]),
+        el("div", { style: "font-weight:600;margin:10px 0 4px" }, ["Atık koduna göre"]),
+        UI.veriTablo({
+          satirlar: kodSatir, bosMesaj: "—",
+          sutunlar: [
+            { etiket: "Kod", deger: function (r) { return r.kod; } },
+            { etiket: "Ad", deger: function (r) { return UI.kisalt(Motor.atikKoduBilgi(r.kod).ad, 46); } },
+            { etiket: "Miktar (t)", sinif: "sayi", deger: function (r) { return Motor.fmt(r.t, 3); } },
+            { etiket: "Pay", sinif: "sayi", deger: function (r) { return A.toplam_t > 0 ? "%" + Motor.fmt(r.t / A.toplam_t * 100, 1) : "—"; } }
+          ]
+        }),
+        el("div", { style: "font-weight:600;margin:14px 0 4px" }, ["Tesise göre"]),
+        UI.veriTablo({
+          satirlar: tesisSatir, bosMesaj: "—",
+          sutunlar: [
+            { etiket: "Tesis", deger: function (r) { return (birimAdi(r.t) || r.t); } },
+            { etiket: "Miktar (t)", sinif: "sayi", deger: function (r) { return Motor.fmt(r.v, 3); } },
+            { etiket: "Pay", sinif: "sayi", deger: function (r) { return A.toplam_t > 0 ? "%" + Motor.fmt(r.v / A.toplam_t * 100, 1) : "—"; } }
+          ]
+        })
+      ], { mini: "kod / tesis / tehlikelilik" }));
+    }
   }
 
   /* ============================================================

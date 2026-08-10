@@ -172,9 +172,9 @@ VERI.sektor_ciltleri = [
     ]},
    {"kod": "EM-CM-150a.1", "ad": "Atık: üretilen miktar + tehlikeli % + geri dönüşüm %", "tip": "veri", "birim": "t, %",
     "bilesen": [
-     {"no": 1, "ad": "Üretilen toplam atık", "birim": "t", "kaynak": "manuel", "not": "Gaz atıklar kapsam dışıdır (md. 1.3)."},
-     {"no": 2, "ad": "Tehlikeli atık yüzdesi", "birim": "%", "kaynak": "manuel", "yuzde": true, "not": "Türkiye'de Atık Yönetimi Yönetmeliği Ek-4 listesinde yıldızlı (*) kodlar tehlikelidir."},
-     {"no": 3, "ad": "Geri dönüştürülen atık yüzdesi", "birim": "%", "kaynak": "manuel", "yuzde": true, "not": "md. 3.2: enerji geri kazanımı dâhil yakılan malzemeler (R1) geri dönüştürülmüş SAYILMAZ. Düzenli depolamaya gidenler (D kodları) de sayılmaz."}
+     {"no": 1, "ad": "Üretilen toplam atık", "birim": "t", "kaynak": "motor", "motorAnahtar": "atik.toplam", "not": "Gaz atıklar kapsam dışıdır (md. 1.3)."},
+     {"no": 2, "ad": "Tehlikeli atık yüzdesi", "birim": "%", "kaynak": "motor", "motorAnahtar": "atik.tehlikeliYuzde", "yuzde": true, "not": "Türkiye'de Atık Yönetimi Yönetmeliği Ek-4 listesinde yıldızlı (*) kodlar tehlikelidir."},
+     {"no": 3, "ad": "Geri dönüştürülen atık yüzdesi", "birim": "%", "kaynak": "motor", "motorAnahtar": "atik.geriDonusumYuzde", "yuzde": true, "not": "md. 3.2: enerji geri kazanımı dâhil yakılan malzemeler (R1) geri dönüştürülmüş SAYILMAZ. Düzenli depolamaya gidenler (D kodları) de sayılmaz."}
     ]},
    {"kod": "EM-CM-410a.1", "ad": "Sürdürülebilir yapı sertifikası ürün geliri % (LEED/BREEAM)", "tip": "veri", "birim": "%",
     "bilesen": [

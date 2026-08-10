@@ -18,6 +18,7 @@ window.Depo = (function () {
       faaliyet: [],   // Kapsam 1 & 3 faaliyet satırları
       sogutucu: [],   // Soğutucu akışkan / kaçak satırları
       elektrik: [],   // Kapsam 2 elektrik satırları
+      atik: [],       // Atık satırları (Cilt 8 EM-CM-150a.1 • Atık Yön. Yön. Ek-4 kodları)
       moduller: {},   // TSRS modülleri: { modulId: { anlatilar:{}, kayitlar:[] } }
       sektorMetrik: {}, // Sektör cilt metrikleri: { metrikKodu: { deger, birim, yontem, not } }
       indeks: { org: [], rfi: [], dokuman: [], kanit: [], sayac: {} }, // Kurumsal veri yönetim indeksi (js/indeks.js)
@@ -78,7 +79,7 @@ window.Depo = (function () {
   }
   function yolEtiketi(yol) {
     var UST = { profil: "Şirket profili", faaliyet: "Faaliyet", sogutucu: "Soğutucu/kaçak",
-                elektrik: "Elektrik", moduller: "TSRS modülleri", sektorMetrik: "Sektör metrikleri", indeks: "INDEX" };
+                elektrik: "Elektrik", atik: "Atık", moduller: "TSRS modülleri", sektorMetrik: "Sektör metrikleri", indeks: "INDEX" };
     return (yol || []).map(function (p, i) {
       p = String(p);
       if (p.charAt(0) === "#") { var k = p.slice(1); return k.indexOf(":") >= 0 ? k.split(":").slice(1).join(":") : k; }
@@ -272,7 +273,7 @@ window.Depo = (function () {
   function ozetUret(patch) {
     var etiket = {
       profil: "Şirket profili", faaliyet: "Faaliyet verisi", sogutucu: "Soğutucu/kaçak",
-      elektrik: "Kapsam 2 elektrik", moduller: "TSRS açıklamaları", sektorMetrik: "Sektör metrikleri",
+      elektrik: "Kapsam 2 elektrik", atik: "Atık verisi", moduller: "TSRS açıklamaları", sektorMetrik: "Sektör metrikleri",
       indeks: "INDEX (organizasyon/RFI/doküman/kanıt)"
     };
     var kokler = {};
@@ -1062,6 +1063,7 @@ window.Depo = (function () {
     liste.push({ yol: "faaliyet", etiket: "Faaliyet (Kapsam 1 & 3)", tip: "tablo", grup: "Veri Girişi", tur: "dizi" });
     liste.push({ yol: "elektrik", etiket: "Elektrik (Kapsam 2)", tip: "tablo", grup: "Veri Girişi", tur: "dizi" });
     liste.push({ yol: "sogutucu", etiket: "Soğutucu / Kaçak Gaz", tip: "tablo", grup: "Veri Girişi", tur: "dizi" });
+    liste.push({ yol: "atik", etiket: "Atık (Cilt 8 EM-CM-150a.1)", tip: "tablo", grup: "Veri Girişi", tur: "dizi" });
     // 5) Doldurulma durumu
     liste.forEach(function (a) {
       if (a.tur === "dizi") {

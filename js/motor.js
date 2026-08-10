@@ -417,6 +417,50 @@ window.Motor = (function () {
     return d;
   };
 
+  /* ============================================================
+     ATIK — kod bilgisi ve işlem (R/D) sınıflandırması
+     ============================================================ */
+  // Atık kodunu ("13 02 08" veya "130208") kataloğa (data/atik_kodlari.js) eşler.
+  // Tehlikelilik YALNIZCA koddaki yıldızdan (katalog "tehlikeli" alanı) gelir.
+  M.atikKoduBilgi = function (kod) {
+    var norm = String(kod || "").replace(/[^0-9]/g, "");
+    var sonuc = { kodNorm: "", ad: "", tehlikeli: false, bulundu: false };
+    if (norm.length !== 6) return sonuc;
+    sonuc.kodNorm = norm.slice(0, 2) + " " + norm.slice(2, 4) + " " + norm.slice(4, 6);
+    var liste = Depo.set("atik_kodlari") || [];
+    for (var i = 0; i < liste.length; i++) {
+      if (String(liste[i].kod).replace(/[^0-9]/g, "") === norm) {
+        sonuc.ad = liste[i].ad; sonuc.tehlikeli = !!liste[i].tehlikeli; sonuc.bulundu = true;
+        return sonuc;
+      }
+    }
+    return sonuc;
+  };
+
+  // Atık işleme yöntemi (R/D kodu) → geri dönüşüm sayımı (Cilt 8):
+  // R2–R11 geri kazanım SAYILIR (R10 sayılır ama tartışmalı → işaretli);
+  // R1 (enerji geri kazanımı, md. 3.2) SAYILMAZ; R12/R13 (ara işlem/depolama,
+  // nihai akıbet belirsiz) SAYILMAZ + uyarı; D1–D15 (bertaraf, md. 3.1.4) SAYILMAZ.
+  M.atikIslemSinifi = function (islemKodu) {
+    var k = String(islemKodu || "").toUpperCase().replace(/\s+/g, "");
+    var m = k.match(/^([RD])(\d{1,2})$/);
+    if (!m) return { sayilir: false, isaretli: false, araIslem: false, durum: "belirsiz",
+                     uyari: "İşlem kodu girilmemiş veya tanınmadı — geri dönüşüme sayılmadı" };
+    var harf = m[1], no = parseInt(m[2], 10);
+    if (harf === "D")
+      return { sayilir: false, isaretli: false, araIslem: false, durum: "bertaraf (D" + no + ")", uyari: null };
+    if (no === 1)
+      return { sayilir: false, isaretli: false, araIslem: false, durum: "enerji geri kazanımı (R1)", uyari: null };
+    if (no === 12 || no === 13)
+      return { sayilir: false, isaretli: false, araIslem: true, durum: "ara işlem/depolama (R" + no + ")",
+               uyari: "R" + no + " ara işlem — nihai akıbet belirsiz, geri dönüşüme sayılmadı; alıcı tesisin çıkış işlemi doğrulanmalı" };
+    if (no >= 2 && no <= 11)
+      return { sayilir: true, isaretli: (no === 10), araIslem: false, durum: "geri kazanım (R" + no + ")",
+               uyari: (no === 10) ? "R10 (araziye yayarak yarar) sayıldı ancak tartışmalı — mermer pasası için teyit edilmeli" : null };
+    return { sayilir: false, isaretli: false, araIslem: false, durum: "tanınmayan R kodu (R" + no + ")",
+             uyari: "R" + no + " tanınmayan işlem kodu — geri dönüşüme sayılmadı" };
+  };
+
   M.toplamlar = function () {
     var v = Depo.veri;
     var T = {
@@ -427,6 +471,8 @@ window.Motor = (function () {
       biyojenik: { co2kg: 0, tco2: 0 },   // kapsam DIŞI, ayrı raporlanır
       enerji: { yakitGJ: 0, yakitGJ_gcv: 0, elektrikGJ: 0, toplamGJ: 0, toplamGJ_gcv: 0, gcvEksik: 0,
                 yenilenebilirYakitGJ_gcv: 0, alternatifYakitGJ_gcv: 0 },
+      atik: { toplam_t: 0, tehlikeli_t: 0, tehlikesiz_t: 0, geriDonusum_t: 0, araIslem_t: 0,
+              kayit: 0, kodBulunamadi: 0, koda: {}, tesise: {}, uyari: [] },
       hatalar: []
     };
     v.faaliyet.forEach(function (s) {
@@ -462,6 +508,24 @@ window.Motor = (function () {
       // Kapsam 2 gazları da gaz tablosuna dahil (lokasyona dayalı) — 5.1 toplamıyla tutarlılık
       T.gaz.co2kg += h.co2kg; T.gaz.ch4kg += h.ch4kg; T.gaz.n2okg += h.n2okg;
       T.k2.kwh += sayi(s.kwh); T.k2.recKwh += Math.min(sayi(s.recKwh), sayi(s.kwh));
+    });
+    (v.atik || []).forEach(function (s) {
+      var miktar = sayi(s.miktar_t);
+      if (!(miktar > 0)) return;
+      var A = T.atik;
+      A.kayit += 1;
+      A.toplam_t += miktar;
+      var bilgi = M.atikKoduBilgi(s.atikKodu);
+      if (!bilgi.bulundu) A.kodBulunamadi += 1;
+      if (bilgi.tehlikeli) A.tehlikeli_t += miktar; else A.tehlikesiz_t += miktar;
+      var sinif = M.atikIslemSinifi(s.islemKodu);
+      if (sinif.sayilir)  A.geriDonusum_t += miktar;
+      if (sinif.araIslem) A.araIslem_t   += miktar;
+      if (sinif.uyari)    A.uyari.push((s.no || bilgi.kodNorm || "?") + ": " + sinif.uyari);
+      var kk = bilgi.kodNorm || (s.atikKodu || "?");
+      A.koda[kk] = (A.koda[kk] || 0) + miktar;
+      var tk = s.birimId || "(tesissiz)";
+      A.tesise[tk] = (A.tesise[tk] || 0) + miktar;
     });
     T.biyojenik.tco2 = T.biyojenik.co2kg / 1000;
     T.k1.toplam = T.k1.sabit + T.k1.mobil + T.k1.proses + T.k1.kacak;
@@ -772,6 +836,29 @@ window.Motor = (function () {
         var sr = yuzde(pay, "Yenilenebilir yakıt + sertifikalı elektrik");
         if (sr && sr.deger != null) sr.eksik = "Yerinde üretim (GES) kayıt tipi yok; öz tüketim dahil edilemedi";
         return sr;
+      case "atik.toplam": {
+        var A = T.atik;
+        return { deger: A.toplam_t || null, birim: "t",
+                 kaynak: A.kayit + " atık kaydı toplamı" +
+                         (A.kodBulunamadi ? (" • " + A.kodBulunamadi + " kayıtta kod katalogda bulunamadı") : ""),
+                 eksik: A.kayit ? null : "Atık kaydı girilmemiş" };
+      }
+      case "atik.tehlikeliYuzde": {
+        var A2 = T.atik;
+        if (!(A2.toplam_t > 0)) return { deger: null, birim: "%", kaynak: "Atık toplamı sıfır", eksik: "Atık kaydı yok" };
+        return { deger: A2.tehlikeli_t / A2.toplam_t * 100, birim: "%",
+                 kaynak: "Tehlikeli " + M.fmt(A2.tehlikeli_t, 3) + " / toplam " + M.fmt(A2.toplam_t, 3) +
+                         " t (Ek-4 yıldızlı kodlar)" };
+      }
+      case "atik.geriDonusumYuzde": {
+        var A3 = T.atik;
+        if (!(A3.toplam_t > 0)) return { deger: null, birim: "%", kaynak: "Atık toplamı sıfır", eksik: "Atık kaydı yok" };
+        var araNot = A3.araIslem_t > 0 ? (M.fmt(A3.araIslem_t, 3) + " t ara işlemde (R12/R13), sayılmadı") : null;
+        var uyariNot = A3.uyari.length ? (A3.uyari.length + " kayıt işlem kodu uyarısı taşıyor") : null;
+        return { deger: A3.geriDonusum_t / A3.toplam_t * 100, birim: "%",
+                 kaynak: "Geri kazanım " + M.fmt(A3.geriDonusum_t, 3) + " / toplam " + M.fmt(A3.toplam_t, 3) + " t (R2–R11)",
+                 eksik: [araNot, uyariNot].filter(Boolean).join(" • ") || null };
+      }
       default:
         return null;
     }
